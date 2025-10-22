@@ -22,10 +22,21 @@ class Api:
             logger.exception("Failed to list windows")
             return {"success": False, "message": str(exc)}
 
-    def start_capture(self, hwnd, interval=0.5, base_dir: Optional[str] = None) -> Dict[str, Any]:
+    def start_capture(
+        self,
+        hwnd,
+        interval=0.5,
+        base_dir: Optional[str] = None,
+        make_video: bool = False,
+    ) -> Dict[str, Any]:
         try:
             hwnd_int = self._parse_hwnd(hwnd)
-            info = screenshot_manager.start(hwnd_int, float(interval), base_dir=base_dir)
+            info = screenshot_manager.start(
+                hwnd_int,
+                float(interval),
+                base_dir=base_dir,
+                make_video=bool(make_video),
+            )
             return {"success": True, "data": info}
         except Exception as exc:
             logger.exception("Failed to start capture")
@@ -128,7 +139,7 @@ def get_html_path() -> str:
         html_path = os.path.abspath(
             os.path.join(os.path.dirname(__file__), "..", "frontend", "dist", "index.html")
         )
-    logger.info(f"HTML file path: {html_path}")
+    # logger.info(f"HTML file path: {html_path}")
     return html_path
 
 
@@ -141,9 +152,9 @@ if __name__ == "__main__":
         url=file_url,
         js_api=api,
         width=960,
-        height=700,
+        height=900,
         resizable=True,
-        min_size=(820, 600),
+        min_size=(920, 720),
     )
 
     webview.start()

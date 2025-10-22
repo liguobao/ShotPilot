@@ -8,6 +8,12 @@ from typing import Dict, List, Optional, Tuple
 
 import psutil
 from PIL import ImageGrab
+try:
+    from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
+    MOVIEPY_AVAILABLE = True
+except ModuleNotFoundError:
+    ImageSequenceClip = None
+    MOVIEPY_AVAILABLE = False
 
 import ctypes
 from ctypes import wintypes
@@ -227,9 +233,19 @@ class ScreenshotManager:
         self._last_error: Optional[str] = None
         self._count: int = 0
         self._last_file: Optional[str] = None
+        self._make_video: bool = False
+        self._video_path: Optional[str] = None
+        self._out_dir: Optional[str] = None
+        self._interval: float = 0.5
         set_dpi_awareness()
 
-    def start(self, hwnd: int, interval: float = 0.5, base_dir: Optional[str] = None) -> Dict[str, str]:
+    def start(
+        self,
+        hwnd: int,
+        interval: float = 0.5,
+        base_dir: Optional[str] = None,
+        make_video: bool = False,
+    ) -> Dict[str, str]:
         with self._lock:
             if self._thread and self._thread.is_alive():
                 raise RuntimeError("已有截屏任务在运行，请先停止")
@@ -251,6 +267,12 @@ class ScreenshotManager:
             self._last_error = None
             self._count = 0
             self._last_file = None
+            if make_video and not MOVIEPY_AVAILABLE:
+                raise RuntimeError("当前环境未安装 moviepy，无法生成视频，请先安装或关闭该选项。")
+            self._make_video = bool(make_video)
+            self._video_path = None
+            self._out_dir = out_dir
+            self._interval = interval if interval > 0 else 0.5
 
             self._thread = Thread(
                 target=self._loop,
@@ -269,6 +291,7 @@ class ScreenshotManager:
                 "started_at": datetime.now().isoformat(timespec="seconds"),
                 "count": self._count,
                 "last_file": self._last_file,
+                "make_video": self._make_video,
             }
             return dict(self._current)
 
@@ -285,6 +308,7 @@ class ScreenshotManager:
                     if self._current is not None:
                         self._current["count"] = idx
                         self._current["last_file"] = save_path
+                        self._current["make_video"] = self._make_video
                 # Wait on the event so we can stop promptly
                 if self._stop_event.wait(max(0.01, interval)):
                     break
@@ -302,12 +326,28 @@ class ScreenshotManager:
             self._stop_event.set()
             thread = self._thread
         thread.join(timeout=5)
+        video_path = None
+        final_count = self._count
+        final_last_file = self._last_file
+        if self._make_video and final_count > 0 and self._out_dir:
+            try:
+                video_path = self._create_video(self._out_dir, self._interval)
+            except Exception as exc:
+                self._last_error = self._last_error or str(exc)
+                video_path = None
         with self._lock:
+            self._video_path = video_path
+            self._make_video = False
+            self._out_dir = None
+            self._interval = 0.5
+            self._count = 0
+            self._last_file = None
             return {
                 "stopped": True,
                 "message": self._last_error,
-                "count": self._count,
-                "last_file": self._last_file,
+                "count": final_count,
+                "last_file": final_last_file,
+                "video_path": self._video_path,
             }
 
     def status(self) -> Dict[str, Optional[str]]:
@@ -320,7 +360,43 @@ class ScreenshotManager:
             "last_error": self._last_error,
             "count": self._count,
             "last_file": self._last_file,
+            "video_path": self._video_path,
+            "make_video": self._make_video,
         }
+
+    def _create_video(self, out_dir: str, interval: float) -> Optional[str]:
+        if not MOVIEPY_AVAILABLE:
+            raise RuntimeError("当前环境未安装 moviepy，无法生成视频")
+        frames = sorted(
+            [
+                os.path.join(out_dir, name)
+                for name in os.listdir(out_dir)
+                if name.lower().endswith((".png", ".jpg", ".jpeg"))
+            ]
+        )
+        if not frames:
+            return None
+        actual_fps = 1.0 / interval if interval > 0 else 1.0
+        target_fps = 60
+        if actual_fps > target_fps:
+            step = max(1, int(round(actual_fps / target_fps)))
+            frames = frames[::step] or frames
+            fps = target_fps
+        else:
+            fps = max(1, int(round(actual_fps)))
+        clip = ImageSequenceClip(frames, fps=fps)
+        video_path = os.path.join(out_dir, "capture.mp4")
+        try:
+            clip.write_videofile(
+                video_path,
+                codec="libx264",
+                audio=False,
+                fps=fps,
+                logger=None,
+            )
+        finally:
+            clip.close()
+        return video_path
 
 
 screenshot_manager = ScreenshotManager()

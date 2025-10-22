@@ -4,4 +4,4 @@ psutil>=5.9
 Pillow>=10.4
 pywebview>=4.4
 pyinstaller>=6.6
-psutil
+moviepy>=1.0

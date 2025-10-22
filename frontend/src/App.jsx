@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Button, Card, Descriptions, Image, Input, InputNumber, Select, Space, Typography } from 'antd'
+import { Alert, Button, Card, Checkbox, Image, Input, InputNumber, Select, Space, Typography } from 'antd'
 
 const { Title, Paragraph, Text } = Typography
 
@@ -56,6 +56,7 @@ export default function App() {
   const [previewMeta, setPreviewMeta] = useState(null)
   const [baseDir, setBaseDir] = useState('')
   const [baseDirLoading, setBaseDirLoading] = useState(false)
+  const [makeVideo, setMakeVideo] = useState(false)
   const lastCountRef = useRef(0)
 
   const showMessage = useCallback((type, content) => {
@@ -101,7 +102,7 @@ export default function App() {
     } finally {
       setLoadingApps(false)
     }
-  }, [api, showMessage])
+  }, [api, makeVideo, showMessage])
 
   const handleStart = useCallback(async () => {
     if (!api) {
@@ -115,7 +116,12 @@ export default function App() {
 
     try {
       lastCountRef.current = 0
-      const res = await api.start_capture(selectedHwnd, intervalSec, baseDir || undefined)
+      const res = await api.start_capture(
+        selectedHwnd,
+        intervalSec,
+        baseDir || undefined,
+        makeVideo,
+      )
       if (!res?.success) {
         throw new Error(res?.message || '截屏启动失败')
       }
@@ -126,6 +132,8 @@ export default function App() {
         last_error: null,
         count: res.data?.count ?? 0,
         last_file: res.data?.last_file ?? null,
+        make_video: res.data?.make_video ?? makeVideo,
+        video_path: res.data?.video_path ?? null,
       })
       lastCountRef.current = res.data?.count ?? 0
       showMessage(
@@ -135,7 +143,7 @@ export default function App() {
     } catch (err) {
       showMessage('error', err.message || '截屏启动失败')
     }
-  }, [api, intervalSec, selectedHwnd, baseDir, showMessage])
+  }, [api, intervalSec, selectedHwnd, baseDir, makeVideo, showMessage])
 
   const handleStop = useCallback(async () => {
     if (!api) {
@@ -148,11 +156,19 @@ export default function App() {
       if (!res?.success) {
         throw new Error(res?.message || '没有运行中的任务')
       }
+      const totalCount = res?.data?.count ?? 0
+      const videoPath = res?.data?.video_path
       setCapturing(false)
       lastCountRef.current = 0
       setStatus((prev) => {
+        const wasMakingVideo = prev?.current?.make_video ?? makeVideo
         const currentInfo = prev?.current
-          ? { ...prev.current, count: 0 }
+          ? {
+              ...prev.current,
+              count: 0,
+              make_video: wasMakingVideo,
+              video_path: videoPath || prev.current.video_path || null,
+            }
           : null
         return {
           running: false,
@@ -160,23 +176,44 @@ export default function App() {
           last_error: null,
           count: 0,
           last_file: null,
+          video_path: videoPath || null,
+          make_video: wasMakingVideo,
         }
       })
-      showMessage('info', '截屏任务已停止。')
+      const stopMessage = videoPath
+        ? `截屏任务已停止，共 ${totalCount} 张，视频已生成：${videoPath}`
+        : `截屏任务已停止，共 ${totalCount} 张。`
+      showMessage(videoPath ? 'success' : 'info', stopMessage)
 
       const statusRes = await api.get_status()
       if (statusRes?.success) {
         const data = statusRes.data || {}
         setStatus((prev) => {
+          const fallbackVideo =
+            data?.video_path ?? videoPath ?? prev?.video_path ?? null
+          const makeVideoFlag =
+            data?.make_video ??
+            prev?.make_video ??
+            prev?.current?.make_video ??
+            makeVideo
           const currentInfo =
             prev?.current ||
-            (data?.current ? { ...data.current, count: 0 } : null)
+            (data?.current
+              ? {
+                  ...data.current,
+                  count: 0,
+                  video_path: data.current.video_path ?? fallbackVideo,
+                  make_video: data.current.make_video ?? makeVideoFlag,
+                }
+              : null)
           return {
             running: data?.running ?? false,
             current: currentInfo,
             last_error: data?.last_error ?? null,
             count: 0,
             last_file: null,
+            video_path: fallbackVideo,
+            make_video: makeVideoFlag,
           }
         })
       }
@@ -482,6 +519,7 @@ export default function App() {
                 gap: 12,
                 alignItems: 'center',
                 flexWrap: 'wrap',
+                flexGrow: 1,
               }}
             >
               <Text style={{ minWidth: 96, whiteSpace: 'nowrap' }}>截图间隔（秒）</Text>
@@ -498,6 +536,13 @@ export default function App() {
                   setIntervalSec(next)
                 }}
               />
+              <Checkbox
+                checked={makeVideo}
+                onChange={(e) => setMakeVideo(e.target.checked)}
+                disabled={capturing}
+              >
+                停止后生成 MP4
+              </Checkbox>
             </div>
 
             <div
