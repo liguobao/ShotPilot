@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+
+# PyInstaller / build artefacts
+build/
+dist/
+*.spec
+
+# Logs
+logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+*.log
+*.tsbuildinfo
+package-lock.json
+
+# OS
+Thumbs.db
+.DS_Store
+
