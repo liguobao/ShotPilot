@@ -60,7 +60,24 @@ export default function App() {
 
   const showMessage = useCallback((type, content) => {
     setMessage({ type, content, at: Date.now() })
+    window.setTimeout(() => {
+      setMessage((prev) => {
+        if (!prev) return prev
+        if (prev.type !== type || prev.content !== content) return prev
+        return null
+      })
+    }, 10000)
   }, [])
+
+  const openPath = useCallback(
+    (dir) => {
+      if (!dir) return
+      window.pywebview?.api
+        ?.open_path(dir)
+        ?.catch(() => showMessage('error', '无法打开目录，请手动查看'))
+    },
+    [showMessage]
+  )
 
   const fetchApps = useCallback(async () => {
     if (!api) {
@@ -132,11 +149,36 @@ export default function App() {
         throw new Error(res?.message || '没有运行中的任务')
       }
       setCapturing(false)
+      lastCountRef.current = 0
+      setStatus((prev) => {
+        const currentInfo = prev?.current
+          ? { ...prev.current, count: 0 }
+          : null
+        return {
+          running: false,
+          current: currentInfo,
+          last_error: null,
+          count: 0,
+          last_file: null,
+        }
+      })
       showMessage('info', '截屏任务已停止。')
 
       const statusRes = await api.get_status()
       if (statusRes?.success) {
-        setStatus(statusRes.data || null)
+        const data = statusRes.data || {}
+        setStatus((prev) => {
+          const currentInfo =
+            prev?.current ||
+            (data?.current ? { ...data.current, count: 0 } : null)
+          return {
+            running: data?.running ?? false,
+            current: currentInfo,
+            last_error: data?.last_error ?? null,
+            count: 0,
+            last_file: null,
+          }
+        })
       }
     } catch (err) {
       showMessage('error', err.message || '停止截屏失败')
@@ -265,32 +307,30 @@ export default function App() {
       )
     }
     if (status.running && status.current) {
+      const dir = status.current.output_dir
       return (
         <Alert
           type="info"
           showIcon
-          message={`正在截屏：${status.current.title}`}
+          message="正在截屏"
           description={
-            <div>
-              <div>保存目录：{status.current.output_dir}</div>
-              {status.current.base_dir ? (
-                <div>根目录：{status.current.base_dir}</div>
-              ) : null}
-              <div>间隔：{status.current.interval} 秒</div>
-            </div>
+            dir ? (
+              <Button
+                type="link"
+                style={{ padding: 0 }}
+                onClick={() => openPath(dir)}
+              >
+                {dir}
+              </Button>
+            ) : (
+              <Text type="secondary">未获取保存目录</Text>
+            )
           }
         />
       )
     }
-    return (
-      <Alert
-        type="success"
-        showIcon
-        message="没有运行中的截屏任务"
-        description="选择窗口并点击“开始截屏”即可启动新的任务。"
-      />
-    )
-  }, [status])
+    return null
+  }, [status, openPath])
 
   const messageAlert = useMemo(() => {
     if (!message) return null
@@ -334,7 +374,9 @@ export default function App() {
     }
   }, [selectedAppDetail, previewMeta])
 
-  const captureCount = status?.current?.count ?? status?.count ?? 0
+  const captureCount = capturing
+    ? status?.current?.count ?? status?.count ?? lastCountRef.current ?? 0
+    : 0
 
   const handleChooseDirectory = useCallback(async () => {
     if (!api) {
@@ -445,9 +487,9 @@ export default function App() {
               <Text style={{ minWidth: 96, whiteSpace: 'nowrap' }}>截图间隔（秒）</Text>
               <InputNumber
                 size="large"
-                min={0.1}
+                min={0.01}
                 max={60}
-                step={0.1}
+                step={0.01}
                 precision={2}
                 value={intervalSec}
                 onChange={(value) => {
@@ -473,7 +515,24 @@ export default function App() {
                 readOnly
                 value={baseDir}
                 placeholder="选择截屏保存目录"
-                style={{ flex: 1 }}
+                style={{
+                  flex: 1,
+                  cursor:
+                    capturing &&
+                    (status?.current?.output_dir || baseDir)
+                      ? 'pointer'
+                      : 'default',
+                  userSelect: 'none',
+                }}
+                onClick={() => {
+                  if (!capturing) {
+                    return
+                  }
+                  const dirToOpen =
+                    status?.current?.output_dir || baseDir
+                  if (!dirToOpen) return
+                  openPath(dirToOpen)
+                }}
               />
               <Button
                 size="large"
@@ -520,20 +579,18 @@ export default function App() {
           <Space direction="vertical" size="large" style={{ width: '100%' }}>
             {detailLines ? (
               <Card size="small" style={{ width: '100%' }}>
-                <Descriptions
-                  size="small"
-                  column={1}
-                  title="窗口信息"
-                  colon={false}
-                  labelStyle={{ width: 80 }}
-                >
-                  <Descriptions.Item label="标题">{detailLines.title}</Descriptions.Item>
-                  <Descriptions.Item label="进程">{detailLines.process}</Descriptions.Item>
-                  <Descriptions.Item label="句柄">{detailLines.hwndHex}</Descriptions.Item>
-                  {detailLines.sizeLine ? (
-                    <Descriptions.Item label="尺寸">{detailLines.sizeLine}</Descriptions.Item>
-                  ) : null}
-                </Descriptions>
+                <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                  <Text strong style={{ fontSize: 16 }}>
+                    {detailLines.title}
+                  </Text>
+                  <Space wrap>
+                    <Text type="secondary">进程：{detailLines.process}</Text>
+                    <Text type="secondary">句柄：{detailLines.hwndHex}</Text>
+                    {detailLines.sizeLine ? (
+                      <Text type="secondary">尺寸：{detailLines.sizeLine}</Text>
+                    ) : null}
+                  </Space>
+                </Space>
               </Card>
             ) : null}
 

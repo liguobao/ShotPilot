@@ -34,6 +34,13 @@ SetForegroundWindow = user32.SetForegroundWindow
 ShowWindow = user32.ShowWindow
 GetWindowThreadProcessId = user32.GetWindowThreadProcessId
 
+SM_XVIRTUALSCREEN = 76
+SM_YVIRTUALSCREEN = 77
+SM_CXVIRTUALSCREEN = 78
+SM_CYVIRTUALSCREEN = 79
+
+FULL_SCREEN_HWND = -1
+
 
 class RECT(ctypes.Structure):
     _fields_ = [
@@ -67,6 +74,8 @@ def is_window_cloaked(hwnd: int) -> bool:
 
 
 def get_window_title(hwnd: int) -> str:
+    if hwnd == FULL_SCREEN_HWND:
+        return "全屏桌面"
     length = GetWindowTextLengthW(hwnd)
     if length == 0:
         return ""
@@ -76,6 +85,8 @@ def get_window_title(hwnd: int) -> str:
 
 
 def hwnd_to_pid(hwnd: int) -> int:
+    if hwnd == FULL_SCREEN_HWND:
+        return 0
     pid = wintypes.DWORD()
     GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
     return pid.value
@@ -96,6 +107,16 @@ def enum_windows() -> List[int]:
 
 def list_windows() -> List[Dict[str, str]]:
     rows = []
+    rows.append(
+        {
+            "hwnd": FULL_SCREEN_HWND,
+            "hwnd_hex": "全屏",
+            "pid": 0,
+            "process": "Desktop",
+            "title": "全屏桌面",
+            "display": "全屏桌面 (Desktop)",
+        }
+    )
     for hwnd in enum_windows():
         title = get_window_title(hwnd)
         pid = hwnd_to_pid(hwnd)
@@ -113,18 +134,36 @@ def list_windows() -> List[Dict[str, str]]:
                 "display": f"{title} ({pname})",
             }
         )
-    rows.sort(key=lambda x: (x["process"].lower(), x["title"].lower()))
+    rows.sort(
+        key=lambda x: (
+            x["hwnd"] != FULL_SCREEN_HWND,
+            str(x["process"]).lower(),
+            str(x["title"]).lower(),
+        )
+    )
     return rows
 
 
 def bring_to_front(hwnd: int) -> None:
+    if hwnd == FULL_SCREEN_HWND:
+        return
     ShowWindow(hwnd, SW_RESTORE)
     ShowWindow(hwnd, SW_SHOW)
     SetForegroundWindow(hwnd)
     time.sleep(0.2)  # let the window refresh
 
 
+def get_virtual_screen_rect() -> Tuple[int, int, int, int]:
+    left = user32.GetSystemMetrics(SM_XVIRTUALSCREEN)
+    top = user32.GetSystemMetrics(SM_YVIRTUALSCREEN)
+    width = user32.GetSystemMetrics(SM_CXVIRTUALSCREEN)
+    height = user32.GetSystemMetrics(SM_CYVIRTUALSCREEN)
+    return left, top, left + width, top + height
+
+
 def get_window_rect(hwnd: int) -> Optional[Tuple[int, int, int, int]]:
+    if hwnd == FULL_SCREEN_HWND:
+        return get_virtual_screen_rect()
     rect = RECT()
     if dwmapi and hasattr(dwmapi, "DwmGetWindowAttribute"):
         dwm_rect = RECT()
@@ -149,7 +188,6 @@ def _grab_window(hwnd: int):
     try:
         img = ImageGrab.grab(bbox=(l, t, r, b), all_screens=True)
     except TypeError:
-        # Pillow < 9.2 does not support all_screens parameter; fall back
         img = ImageGrab.grab(bbox=(l, t, r, b))
     return img, (l, t, r, b)
 

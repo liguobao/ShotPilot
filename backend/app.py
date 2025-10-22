@@ -74,6 +74,18 @@ class Api:
             logger.exception("Failed to fetch default directory")
             return {"success": False, "message": str(exc)}
 
+    def open_path(self, path: str) -> Dict[str, Any]:
+        try:
+            if not path:
+                return {"success": False, "message": "路径为空"}
+            if not os.path.exists(path):
+                return {"success": False, "message": "路径不存在"}
+            os.startfile(path)
+            return {"success": True}
+        except Exception as exc:
+            logger.exception("Failed to open path")
+            return {"success": False, "message": str(exc)}
+
     def preview_capture(self, hwnd) -> Dict[str, Any]:
         try:
             hwnd_int = self._parse_hwnd(hwnd)
