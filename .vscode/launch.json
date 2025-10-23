@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python + React build",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/app.py",
+      "console": "integratedTerminal",
+      "preLaunchTask": "npm: build"
+    }
+  ]
+}

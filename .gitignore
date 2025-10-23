@@ -17,7 +17,6 @@ logs/
 *.log
 
 # IDE
-.vscode/
 .idea/
 
 # Node / frontend
