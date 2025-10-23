@@ -17,6 +17,55 @@ from service import (
 
 #logger.add("./logs/{time}.log", rotation="10 MB")
 
+SUPPORTED_LANGUAGES: Dict[str, Dict[str, str]] = {
+    "zh-CN": {
+        "language_name": "中文",
+        "app_title": "自动截图器",
+        "window_not_found": "未找到应用窗口",
+        "directory_not_selected": "未选择目录",
+        "path_empty": "路径为空",
+        "path_not_exists": "路径不存在",
+    },
+    "en": {
+        "language_name": "English",
+        "app_title": "Auto Screenshot",
+        "window_not_found": "Application window not found",
+        "directory_not_selected": "No directory selected",
+        "path_empty": "Path is empty",
+        "path_not_exists": "Path does not exist",
+    },
+    "ja": {
+        "language_name": "日本語",
+        "app_title": "自動スクリーンショット",
+        "window_not_found": "アプリケーションウィンドウが見つかりません",
+        "directory_not_selected": "フォルダが選択されていません",
+        "path_empty": "パスが空です",
+        "path_not_exists": "パスが存在しません",
+    },
+}
+
+DEFAULT_LANGUAGE = "zh-CN"
+current_language = DEFAULT_LANGUAGE
+
+
+def translate(key: str, language: Optional[str] = None) -> str:
+    lang = language or current_language
+    table = SUPPORTED_LANGUAGES.get(lang) or SUPPORTED_LANGUAGES[DEFAULT_LANGUAGE]
+    return table.get(key, SUPPORTED_LANGUAGES[DEFAULT_LANGUAGE].get(key, key))
+
+
+def _update_window_title(window: Any, language: Optional[str] = None) -> None:
+    if not window:
+        return
+    title = translate("app_title", language)
+    if hasattr(window, "set_title"):
+        window.set_title(title)
+    else:
+        try:
+            window.title = title  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
 
 class Api:
     """Expose screenshot workflows to the frontend via pywebview."""
@@ -24,6 +73,24 @@ class Api:
     @staticmethod
     def _get_window():
         return webview.windows[0] if webview.windows else None
+
+    def get_supported_languages(self) -> Dict[str, Any]:
+        data = [
+            {"code": code, "label": values["language_name"]}
+            for code, values in SUPPORTED_LANGUAGES.items()
+        ]
+        return {"success": True, "data": data}
+
+    def get_language(self) -> Dict[str, Any]:
+        return {"success": True, "data": {"language": current_language}}
+
+    def set_language(self, language: str) -> Dict[str, Any]:
+        global current_language
+        target = language if language in SUPPORTED_LANGUAGES else DEFAULT_LANGUAGE
+        current_language = target
+        window = self._get_window()
+        _update_window_title(window, current_language)
+        return {"success": True, "data": {"language": current_language}}
 
     def list_apps(self) -> Dict[str, Any]:
         try:
@@ -74,7 +141,7 @@ class Api:
         try:
             window = self._get_window()
             if not window:
-                return {"success": False, "message": "未找到应用窗口"}
+                return {"success": False, "message": translate("window_not_found")}
             if hasattr(window, "minimize"):
                 window.minimize()  # pywebview 4.x
             else:
@@ -88,7 +155,7 @@ class Api:
         try:
             window = self._get_window()
             if not window:
-                return {"success": False, "message": "未找到应用窗口"}
+                return {"success": False, "message": translate("window_not_found")}
             if hasattr(window, "restore"):
                 window.restore()
             else:
@@ -115,13 +182,17 @@ class Api:
         try:
             window = self._get_window()
             if not window:
-                return {"success": False, "message": "未找到应用窗口"}
+                return {"success": False, "message": translate("window_not_found")}
             result = window.create_file_dialog(
                 webview.FOLDER_DIALOG,
                 directory=initial or default_base_dir(),
             )
             if not result:
-                return {"success": False, "message": "未选择目录"}
+                return {
+                    "success": False,
+                    "message": translate("directory_not_selected"),
+                    "code": "directory_not_selected",
+                }
             # pywebview returns tuple/list
             path = result[0] if isinstance(result, (list, tuple)) else result
             return {"success": True, "data": path}
@@ -139,9 +210,9 @@ class Api:
     def open_path(self, path: str) -> Dict[str, Any]:
         try:
             if not path:
-                return {"success": False, "message": "路径为空"}
+                return {"success": False, "message": translate("path_empty")}
             if not os.path.exists(path):
-                return {"success": False, "message": "路径不存在"}
+                return {"success": False, "message": translate("path_not_exists")}
             os.startfile(path)
             return {"success": True}
         except Exception as exc:
@@ -199,13 +270,12 @@ if __name__ == "__main__":
     html_path = get_html_path()
     file_url = "file://" + html_path.replace("\\", "/")
     window = webview.create_window(
-        "自动截图器",
+        translate("app_title"),
         url=file_url,
         js_api=api,
         width=960,
-        height=900,
+        height=720,
         resizable=True,
-        min_size=(920, 720),
     )
 
     webview.start()

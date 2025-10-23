@@ -1,7 +1,240 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Button, Card, Checkbox, Image, Input, InputNumber, Select, Space, Typography } from 'antd'
+import { GlobalOutlined } from '@ant-design/icons'
+import { DEFAULT_LOCALE, DEFAULT_SINGLE_CAPTURE_SHORTCUT, LOCALE_OPTIONS, TRANSLATIONS } from './i18n'
 
 const { Title, Paragraph, Text } = Typography
+
+const normalizeModifier = (token) => {
+  const normalized = token.toLowerCase()
+  if (normalized === 'ctrl' || normalized === 'control') return 'ctrl'
+  if (normalized === 'shift') return 'shift'
+  if (normalized === 'alt' || normalized === 'option') return 'alt'
+  if (
+    normalized === 'cmd' ||
+    normalized === 'command' ||
+    normalized === 'meta' ||
+    normalized === 'win' ||
+    normalized === 'windows' ||
+    normalized === 'super'
+  ) {
+    return 'meta'
+  }
+  return null
+}
+
+const createKeyMatcher = (token) => {
+  const cleaned = token.trim()
+  if (!cleaned) return null
+  const normalized = cleaned.toLowerCase().replace(/\s+/g, '')
+
+  if (/^[a-z0-9]$/.test(normalized)) {
+    const value = normalized
+    return (event) =>
+      typeof event.key === 'string' &&
+      event.key.length === 1 &&
+      event.key.toLowerCase() === value
+  }
+
+  if (/^key[a-z]$/.test(normalized)) {
+    const value = normalized.slice(3)
+    return (event) =>
+      (typeof event.code === 'string' && event.code.toLowerCase() === normalized) ||
+      (typeof event.key === 'string' && event.key.length === 1 && event.key.toLowerCase() === value)
+  }
+
+  if (/^digit[0-9]$/.test(normalized)) {
+    const value = normalized.slice(5)
+    return (event) =>
+      (typeof event.code === 'string' && event.code.toLowerCase() === normalized) ||
+      event.key === value
+  }
+
+  if (/^f([1-9]|1[0-9]|2[0-4])$/.test(normalized)) {
+    const value = normalized.toUpperCase()
+    return (event) => typeof event.key === 'string' && event.key.toUpperCase() === value
+  }
+
+  switch (normalized) {
+    case 'space':
+    case 'spacebar':
+      return (event) => event.code === 'Space' || event.key === ' '
+    case 'enter':
+    case 'return':
+      return (event) => event.key === 'Enter'
+    case 'escape':
+    case 'esc':
+      return (event) => event.key === 'Escape'
+    case 'tab':
+      return (event) => event.key === 'Tab'
+    case 'backspace':
+      return (event) => event.key === 'Backspace'
+    case 'delete':
+    case 'del':
+      return (event) => event.key === 'Delete'
+    case 'home':
+      return (event) => event.key === 'Home'
+    case 'end':
+      return (event) => event.key === 'End'
+    case 'pageup':
+      return (event) => event.key === 'PageUp'
+    case 'pagedown':
+      return (event) => event.key === 'PageDown'
+    case 'arrowup':
+    case 'up':
+      return (event) => event.key === 'ArrowUp'
+    case 'arrowdown':
+    case 'down':
+      return (event) => event.key === 'ArrowDown'
+    case 'arrowleft':
+    case 'left':
+      return (event) => event.key === 'ArrowLeft'
+    case 'arrowright':
+    case 'right':
+      return (event) => event.key === 'ArrowRight'
+    default:
+      return null
+  }
+}
+
+const parseShortcut = (shortcut, t) => {
+  const raw = (shortcut || '').trim()
+  if (!raw) {
+    return { valid: false, disabled: true, error: null, match: () => false }
+  }
+  const tokens = raw.split('+').map((token) => token.trim()).filter(Boolean)
+  if (!tokens.length) {
+    return { valid: false, disabled: false, error: t('messages.hotkeyInvalid'), match: () => false }
+  }
+
+  const keyTokenRaw = tokens[tokens.length - 1]
+  const modifierTokens = tokens.slice(0, -1)
+  const modifiers = { ctrl: false, shift: false, alt: false, meta: false }
+
+  for (const token of modifierTokens) {
+    const normalized = normalizeModifier(token)
+    if (!normalized) {
+      return { valid: false, disabled: false, error: t('messages.hotkeyInvalid'), match: () => false }
+    }
+    modifiers[normalized] = true
+  }
+
+  const keyMatcher = createKeyMatcher(keyTokenRaw)
+  if (!keyMatcher) {
+    return { valid: false, disabled: false, error: t('messages.hotkeyInvalid'), match: () => false }
+  }
+
+  const match = (event) => {
+    if (!!modifiers.ctrl !== event.ctrlKey) return false
+    if (!!modifiers.shift !== event.shiftKey) return false
+    if (!!modifiers.alt !== event.altKey) return false
+    if (!!modifiers.meta !== event.metaKey) return false
+    return keyMatcher(event)
+  }
+
+  return { valid: true, disabled: false, error: null, match }
+}
+
+const shouldIgnoreHotkeyEvent = (event) => {
+  const target = event.target
+  if (!target) return false
+  const tagName = typeof target.tagName === 'string' ? target.tagName.toUpperCase() : ''
+  if (typeof target.isContentEditable === 'boolean' && target.isContentEditable) return true
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tagName)) return true
+  if (typeof target.closest === 'function') {
+    const editable = target.closest(
+      'input, textarea, select, [contenteditable], [data-hotkey-ignore="true"]'
+    )
+    if (editable) return true
+  }
+  return false
+}
+
+const getKeyNameFromEvent = (event) => {
+  const { code, key } = event
+  if (!key) {
+    return null
+  }
+  const normalizedKey = key.toLowerCase()
+  if (['control', 'shift', 'alt', 'meta', 'capslock', 'altgraph', 'dead'].includes(normalizedKey)) {
+    return null
+  }
+
+  if (code) {
+    if (code.startsWith('Key') && code.length === 4) {
+      return code.slice(3).toUpperCase()
+    }
+    if (code.startsWith('Digit') && code.length === 6) {
+      return code.slice(5)
+    }
+  }
+
+  const upperKey = key.toUpperCase()
+  if (/^F([1-9]|1[0-9]|2[0-4])$/.test(upperKey)) {
+    return upperKey
+  }
+
+  const specialMap = {
+    ' ': 'Space',
+    Spacebar: 'Space',
+    Space: 'Space',
+    Enter: 'Enter',
+    Return: 'Enter',
+    Escape: 'Esc',
+    Esc: 'Esc',
+    Tab: 'Tab',
+    Backspace: 'Backspace',
+    Delete: 'Delete',
+    Home: 'Home',
+    End: 'End',
+    PageUp: 'PageUp',
+    PageDown: 'PageDown',
+    Insert: 'Insert',
+    ArrowUp: 'ArrowUp',
+    ArrowDown: 'ArrowDown',
+    ArrowLeft: 'ArrowLeft',
+    ArrowRight: 'ArrowRight',
+  }
+  if (specialMap[key]) {
+    return specialMap[key]
+  }
+  if (key.length === 1) {
+    return key.toUpperCase()
+  }
+  return key.charAt(0).toUpperCase() + key.slice(1)
+}
+
+const formatShortcutFromEvent = (event) => {
+  const modifiers = []
+  if (event.ctrlKey || event.key === 'Control') modifiers.push('Ctrl')
+  if (event.shiftKey || event.key === 'Shift') modifiers.push('Shift')
+  if (event.altKey || event.key === 'Alt' || event.key === 'AltGraph') modifiers.push('Alt')
+  if (event.metaKey || event.key === 'Meta') modifiers.push('Command')
+
+  const keyName = getKeyNameFromEvent(event)
+  if (!keyName) {
+    return null
+  }
+
+  const orderedModifiers = []
+  const seen = new Set()
+  for (const mod of ['Ctrl', 'Shift', 'Alt', 'Command']) {
+    if (modifiers.includes(mod) && !seen.has(mod)) {
+      orderedModifiers.push(mod)
+      seen.add(mod)
+    }
+  }
+  orderedModifiers.push(keyName)
+  return orderedModifiers.join('+')
+}
+
+
+function formatTemplate(template, params = {}) {
+  if (!template) return ''
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key) =>
+    Object.prototype.hasOwnProperty.call(params, key) ? String(params[key]) : ''
+  )
+}
 
 function usePywebviewApi() {
   const [api, setApi] = useState(() => window.pywebview?.api ?? null)
@@ -44,6 +277,7 @@ function usePywebviewApi() {
 
 export default function App() {
   const api = usePywebviewApi()
+  const [locale, setLocale] = useState(DEFAULT_LOCALE)
   const [apps, setApps] = useState([])
   const [loadingApps, setLoadingApps] = useState(false)
   const [selectedHwnd, setSelectedHwnd] = useState(null)
@@ -60,7 +294,26 @@ export default function App() {
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [previewCollapsed, setPreviewCollapsed] = useState(false)
   const [singleCapturing, setSingleCapturing] = useState(false)
-  const lastCountRef = useRef(0)
+  const [singleCaptureShortcut, setSingleCaptureShortcut] = useState(
+    DEFAULT_SINGLE_CAPTURE_SHORTCUT
+  )
+
+  const t = useCallback(
+    (key, params) => {
+      const current = TRANSLATIONS[locale] || TRANSLATIONS[DEFAULT_LOCALE]
+      const fallback = TRANSLATIONS[DEFAULT_LOCALE] || {}
+      const template = (current && current[key]) ?? fallback[key] ?? key
+      return params ? formatTemplate(template, params) : template
+    },
+    [locale]
+  )
+
+  const localeOptions = useMemo(() => LOCALE_OPTIONS, [])
+
+  const parsedHotkey = useMemo(
+    () => parseShortcut(singleCaptureShortcut, t),
+    [singleCaptureShortcut, t]
+  )
 
   const showMessage = useCallback((type, content) => {
     setMessage({ type, content, at: Date.now() })
@@ -73,19 +326,69 @@ export default function App() {
     }, 10000)
   }, [])
 
+  useEffect(() => {
+    if (!api?.get_language) {
+      return
+    }
+    let cancelled = false
+    const loadLanguage = async () => {
+      try {
+        const res = await api.get_language()
+        if (!cancelled && res?.success) {
+          const lang = res.data?.language
+          if (lang && TRANSLATIONS[lang]) {
+            setLocale(lang)
+          }
+        }
+      } catch {
+        /* silent */
+      }
+    }
+    loadLanguage()
+    return () => {
+      cancelled = true
+    }
+  }, [api])
+
+  const handleChangeLocale = useCallback(
+    async (value) => {
+      if (value === locale) return
+      const previous = locale
+      setLocale(value)
+      if (!api?.set_language) {
+        return
+      }
+      try {
+        const res = await api.set_language(value)
+        if (!res?.success) {
+          throw new Error(res?.message || '')
+        }
+      } catch (err) {
+        setLocale(previous)
+        const detail = err instanceof Error && err.message ? `: ${err.message}` : ''
+        showMessage('error', `${t('messages.languageChangeError')}${detail}`)
+      }
+    },
+    [api, locale, showMessage, t]
+  )
+
+  useEffect(() => {
+    document.title = t('app.title')
+  }, [t])
+
   const openPath = useCallback(
     (dir) => {
       if (!dir) return
       window.pywebview?.api
         ?.open_path(dir)
-        ?.catch(() => showMessage('error', '无法打开目录，请手动查看'))
+        ?.catch(() => showMessage('error', t('messages.openPathError')))
     },
-    [showMessage]
+    [showMessage, t]
   )
 
   const fetchApps = useCallback(async () => {
     if (!api) {
-      showMessage('error', 'pywebview 接口尚未就绪，请在桌面应用中打开此页面。')
+      showMessage('error', t('messages.refreshAppsMissingApi'))
       return
     }
 
@@ -93,55 +396,58 @@ export default function App() {
     try {
       const res = await api.list_apps()
       if (!res?.success) {
-        throw new Error(res?.message || '无法获取窗口列表')
+        throw new Error(res?.message || t('messages.refreshAppsError'))
       }
       setApps(res.data || [])
       if (res.data?.length) {
-        // 默认选中第一项
         setSelectedHwnd((prev) => prev ?? res.data[0].hwnd)
       }
     } catch (err) {
-      showMessage('error', err.message || '获取窗口列表失败')
+      showMessage('error', err.message || t('messages.refreshAppsError'))
     } finally {
       setLoadingApps(false)
     }
-  }, [api, makeVideo, showMessage])
+  }, [api, showMessage, t])
 
   const minimizeAppWindow = useCallback(async () => {
     if (!api?.minimize_window) return
     try {
       const res = await api.minimize_window()
       if (res && res.success === false) {
-        throw new Error(res.message || '窗口最小化失败')
+        throw new Error(res.message || t('messages.windowMinimizeError'))
       }
     } catch (err) {
       const messageText =
-        err instanceof Error ? err.message || '窗口最小化失败' : '窗口最小化失败'
+        err instanceof Error
+          ? err.message || t('messages.windowMinimizeError')
+          : t('messages.windowMinimizeError')
       showMessage('error', messageText)
     }
-  }, [api, showMessage])
+  }, [api, showMessage, t])
 
   const restoreAppWindow = useCallback(async () => {
     if (!api?.restore_window) return
     try {
       const res = await api.restore_window()
       if (res && res.success === false) {
-        throw new Error(res.message || '窗口恢复失败')
+        throw new Error(res.message || t('messages.windowRestoreError'))
       }
     } catch (err) {
       const messageText =
-        err instanceof Error ? err.message || '窗口恢复失败' : '窗口恢复失败'
+        err instanceof Error
+          ? err.message || t('messages.windowRestoreError')
+          : t('messages.windowRestoreError')
       showMessage('error', messageText)
     }
-  }, [api, showMessage])
+  }, [api, showMessage, t])
 
   const handleStart = useCallback(async () => {
     if (!api) {
-      showMessage('error', 'pywebview 接口不可用，无法启动截屏。')
+      showMessage('error', t('messages.apiUnavailableStart'))
       return
     }
     if (!selectedHwnd) {
-      showMessage('warning', '请选择要截屏的窗口。')
+      showMessage('warning', t('messages.selectWindowRequired'))
       return
     }
 
@@ -154,7 +460,7 @@ export default function App() {
         makeVideo,
       )
       if (!res?.success) {
-        throw new Error(res?.message || '截屏启动失败')
+        throw new Error(res?.message || t('messages.captureStartError'))
       }
       setCapturing(true)
       setStatus({
@@ -168,25 +474,29 @@ export default function App() {
       })
       lastCountRef.current = res.data?.count ?? 0
       await minimizeAppWindow()
+      const directory = res.data?.output_dir || baseDir || t('status.noDirectory')
       showMessage(
         'success',
-        `开始截屏：${res.data?.title || '窗口'}，保存目录 ${res.data?.output_dir}`
+        t('messages.captureStartSuccess', {
+          title: res.data?.title || t('labels.untitledWindow'),
+          dir: directory,
+        })
       )
     } catch (err) {
-      showMessage('error', err.message || '截屏启动失败')
+      showMessage('error', err.message || t('messages.captureStartError'))
     }
-  }, [api, baseDir, intervalSec, makeVideo, minimizeAppWindow, selectedHwnd, showMessage])
+  }, [api, baseDir, intervalSec, makeVideo, minimizeAppWindow, selectedHwnd, showMessage, t])
 
   const handleStop = useCallback(async () => {
     if (!api) {
-      showMessage('error', 'pywebview 接口不可用，无法停止截屏。')
+      showMessage('error', t('messages.apiUnavailableStop'))
       return
     }
 
     try {
       const res = await api.stop_capture()
       if (!res?.success) {
-        throw new Error(res?.message || '没有运行中的任务')
+        throw new Error(res?.message || t('messages.noRunningTask'))
       }
       const totalCount = res?.data?.count ?? 0
       const videoPath = res?.data?.video_path
@@ -213,8 +523,11 @@ export default function App() {
         }
       })
       const stopMessage = videoPath
-        ? `截屏任务已停止，共 ${totalCount} 张，视频已生成：${videoPath}`
-        : `截屏任务已停止，共 ${totalCount} 张。`
+        ? t('messages.captureStopSuccessWithVideo', {
+            count: totalCount,
+            path: videoPath,
+          })
+        : t('messages.captureStopSuccess', { count: totalCount })
       showMessage(videoPath ? 'success' : 'info', stopMessage)
 
       const statusRes = await api.get_status()
@@ -250,19 +563,19 @@ export default function App() {
         })
       }
     } catch (err) {
-      showMessage('error', err.message || '停止截屏失败')
+      showMessage('error', err.message || t('messages.captureStopError'))
     } finally {
       await restoreAppWindow()
     }
-  }, [api, restoreAppWindow, showMessage])
+  }, [api, makeVideo, restoreAppWindow, showMessage, t])
 
   const handleSingleCapture = useCallback(async () => {
     if (!api) {
-      showMessage('error', 'pywebview 接口不可用，无法截屏。')
+      showMessage('error', t('messages.apiUnavailableSingle'))
       return
     }
     if (!selectedHwnd) {
-      showMessage('warning', '请选择要截屏的窗口。')
+      showMessage('warning', t('messages.selectWindowRequired'))
       return
     }
 
@@ -270,20 +583,39 @@ export default function App() {
       setSingleCapturing(true)
       const res = await api.capture_once(selectedHwnd)
       if (!res?.success) {
-        throw new Error(res?.message || '单次截屏失败')
+        throw new Error(res?.message || t('messages.singleCaptureError'))
       }
       const path =
         res?.data?.path ?? (typeof res?.data === 'string' ? res.data : null)
       const successMessage = path
-        ? `单张截图已保存：${path}`
-        : '单张截图已保存到桌面'
+        ? t('messages.singleCaptureSuccess', { path })
+        : t('messages.singleCaptureFallback')
       showMessage('success', successMessage)
     } catch (err) {
-      showMessage('error', err.message || '单次截屏失败')
+      showMessage('error', err.message || t('messages.singleCaptureError'))
     } finally {
       setSingleCapturing(false)
     }
-  }, [api, selectedHwnd, showMessage])
+  }, [api, selectedHwnd, showMessage, t])
+
+  useEffect(() => {
+    if (parsedHotkey.disabled || !parsedHotkey.valid) {
+      return
+    }
+    const handler = (event) => {
+      if (shouldIgnoreHotkeyEvent(event)) {
+        return
+      }
+      if (parsedHotkey.match(event)) {
+        event.preventDefault()
+        handleSingleCapture()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => {
+      window.removeEventListener('keydown', handler)
+    }
+  }, [handleSingleCapture, parsedHotkey])
 
   const fetchPreview = useCallback(
     async (hwnd, options = {}) => {
@@ -295,7 +627,7 @@ export default function App() {
       try {
         const res = await api.preview_capture(hwnd)
         if (!res?.success) {
-          throw new Error(res?.message || '预览失败')
+          throw new Error(res?.message || t('messages.previewError'))
         }
         if (res.data?.image) {
           setPreview(res.data.image)
@@ -308,7 +640,7 @@ export default function App() {
         if (!silent) {
           setPreview(null)
           setPreviewMeta(null)
-          showMessage('error', err.message || '无法获取截图预览')
+          showMessage('error', err.message || t('messages.previewError'))
         }
       } finally {
         if (!skipLoading) {
@@ -316,7 +648,7 @@ export default function App() {
         }
       }
     },
-    [api, showMessage]
+    [api, showMessage, t]
   )
 
   useEffect(() => {
@@ -402,7 +734,7 @@ export default function App() {
         <Alert
           type="error"
           showIcon
-          message="截屏任务出现异常"
+          message={t('status.errorTitle')}
           description={status.last_error}
         />
       )
@@ -413,7 +745,7 @@ export default function App() {
         <Alert
           type="info"
           showIcon
-          message="正在截屏"
+          message={t('status.runningTitle')}
           description={
             dir ? (
               <Button
@@ -424,14 +756,14 @@ export default function App() {
                 {dir}
               </Button>
             ) : (
-              <Text type="secondary">未获取保存目录</Text>
+              <Text type="secondary">{t('status.noDirectory')}</Text>
             )
           }
         />
       )
     }
     return null
-  }, [status, openPath])
+  }, [openPath, status, t])
 
   const messageAlert = useMemo(() => {
     if (!message) return null
@@ -448,8 +780,9 @@ export default function App() {
 
   const options = useMemo(() => {
     return apps.map((app) => {
-      const label = app.title || '（无标题窗口）'
       const isMonitor = app.monitor && typeof app.monitor === 'object'
+      const fallbackTitle = isMonitor ? t('labels.monitor') : t('labels.untitledWindow')
+      const label = (app.title && app.title.trim()) || fallbackTitle
       const descParts = []
       if (isMonitor) {
         if (app.monitor?.device) {
@@ -462,10 +795,10 @@ export default function App() {
           descParts.push(`${app.monitor.width} × ${app.monitor.height}`)
         }
         if (app.monitor?.primary) {
-          descParts.push('主显示器')
+          descParts.push(t('labels.monitorPrimary'))
         }
       } else {
-        descParts.push(app.process || '未知进程')
+        descParts.push(app.process || t('labels.unknownProcess'))
         descParts.push(app.hwnd_hex || app.hwnd)
       }
       const description = descParts.filter(Boolean).join(' · ')
@@ -474,7 +807,7 @@ export default function App() {
         app.process || '',
         app.hwnd_hex || '',
         description,
-        isMonitor ? '显示器' : '',
+        isMonitor ? t('labels.monitor') : '',
       ]
         .filter(Boolean)
         .join(' ')
@@ -483,9 +816,13 @@ export default function App() {
         value: app.hwnd,
         description,
         keywords,
+        data: {
+          label,
+          description,
+        },
       }
     })
-  }, [apps])
+  }, [apps, t])
 
   const selectedAppDetail = useMemo(() => {
     if (!selectedHwnd) return null
@@ -496,10 +833,13 @@ export default function App() {
     if (!selectedAppDetail) return null
     const isMonitor =
       selectedAppDetail.monitor && typeof selectedAppDetail.monitor === 'object'
-    const title = selectedAppDetail.title || (isMonitor ? '显示器' : '未知窗口')
-    const processLabel = isMonitor ? '类型' : '进程'
+    const title =
+      (selectedAppDetail.title && selectedAppDetail.title.trim()) ||
+      (isMonitor ? t('labels.monitor') : t('labels.untitledWindow'))
+    const processLabel = isMonitor ? t('labels.type') : t('labels.process')
     const process =
-      (isMonitor ? '显示器' : selectedAppDetail.process) || '未知进程'
+      (isMonitor ? t('labels.monitor') : selectedAppDetail.process) ||
+      t('labels.unknownProcess')
     const hwndHex = selectedAppDetail.hwnd_hex || selectedAppDetail.hwnd
     const monitorInfo = isMonitor ? selectedAppDetail.monitor || {} : null
     const hasMonitorSize =
@@ -522,7 +862,7 @@ export default function App() {
         monitorInfo && monitorInfo.device ? monitorInfo.device : null,
       monitorPrimary: Boolean(monitorInfo && monitorInfo.primary),
     }
-  }, [selectedAppDetail, previewMeta])
+  }, [previewMeta, selectedAppDetail, t])
 
   const captureCount = capturing
     ? status?.current?.count ?? status?.count ?? lastCountRef.current ?? 0
@@ -530,30 +870,34 @@ export default function App() {
 
   const handleChooseDirectory = useCallback(async () => {
     if (!api) {
-      showMessage('error', 'pywebview 接口不可用，无法选择目录。')
+      showMessage('error', t('messages.apiUnavailableDirectory'))
       return
     }
     setBaseDirLoading(true)
     try {
       const res = await api.choose_directory(baseDir || undefined)
       if (!res?.success) {
-        if (res?.message && res.message !== '未选择目录') {
+        if (res?.code === 'directory_not_selected') {
+          return
+        }
+        if (res?.message) {
           showMessage('error', res.message)
+        } else {
+          showMessage('error', t('messages.chooseDirError'))
         }
         return
       }
       setBaseDir(res.data)
     } catch (err) {
-      showMessage('error', err.message || '选择目录失败')
+      showMessage('error', err.message || t('messages.chooseDirError'))
     } finally {
       setBaseDirLoading(false)
     }
-  }, [api, baseDir, showMessage])
+  }, [api, baseDir, showMessage, t])
 
   return (
     <div
       style={{
-        minHeight: '100vh',
         background: '#f5f5f5',
         padding: 24,
         boxSizing: 'border-box',
@@ -561,7 +905,7 @@ export default function App() {
     >
       <div
         style={{
-          maxWidth: 1200,
+          width: '100%',
           margin: '0 auto',
         }}
       >
@@ -570,13 +914,36 @@ export default function App() {
           bodyStyle={{ padding: 28 }}
         >
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-          <div>
-            <Title level={3} style={{ marginBottom: 8 }}>
-              自动截图器
-            </Title>
-            <Paragraph type="secondary" style={{ marginBottom: 0 }}>
-              选择一个窗口或显示器，点击“开始截屏”即可按固定间隔保存图片。
-            </Paragraph>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'flex-start',
+              gap: 16,
+              flexWrap: 'wrap',
+            }}
+          >
+            <div>
+              <Title level={3} style={{ marginBottom: 8 }}>
+                {t('app.title')}
+              </Title>
+              <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                {t('app.subtitle')}
+              </Paragraph>
+            </div>
+            <Space size={6} align="center">
+              <Space size={4} align="center">
+                <GlobalOutlined style={{ color: 'rgba(0,0,0,0.45)' }} />
+                <Text type="secondary">{t('labels.language')}</Text>
+              </Space>
+              <Select
+                size="large"
+                value={locale}
+                onChange={handleChangeLocale}
+                options={localeOptions}
+                style={{ width: 120 }}
+              />
+            </Space>
           </div>
 
           {messageAlert}
@@ -593,7 +960,7 @@ export default function App() {
               <Select
                 style={{ flex: '1 1 360px', minWidth: 320 }}
                 size="large"
-                placeholder="请选择要截屏的窗口或显示器"
+                placeholder={t('placeholders.windowSelect')}
                 options={options}
                 loading={loadingApps}
                 value={selectedHwnd}
@@ -601,7 +968,7 @@ export default function App() {
                 showSearch
                 optionFilterProp="keywords"
                 optionLabelProp="label"
-                notFoundContent="暂无可用窗口"
+                notFoundContent={t('controls.noWindows')}
                 dropdownMatchSelectWidth={false}
                 dropdownStyle={{ minWidth: 520 }}
                 optionRender={(option) => (
@@ -614,7 +981,7 @@ export default function App() {
                 )}
               />
               <Button onClick={fetchApps} loading={loadingApps} size="large">
-                刷新
+                {t('buttons.refresh')}
               </Button>
               <Button
                 size="large"
@@ -622,7 +989,7 @@ export default function App() {
                 loading={previewLoading}
                 disabled={!selectedHwnd}
               >
-                刷新预览
+                {t('buttons.refreshPreview')}
               </Button>
               <div
                 style={{
@@ -638,7 +1005,7 @@ export default function App() {
                   style={{ padding: 0 }}
                   onClick={() => setShowAdvanced((prev) => !prev)}
                 >
-                  {showAdvanced ? '隐藏高级设置' : '高级设置'}
+                  {showAdvanced ? t('buttons.hideAdvanced') : t('buttons.advanced')}
                 </Button>
               </div>
             </div>
@@ -654,7 +1021,9 @@ export default function App() {
                     flexGrow: 1,
                   }}
                 >
-                  <Text style={{ minWidth: 96, whiteSpace: 'nowrap' }}>截图间隔（秒）</Text>
+                  <Text style={{ minWidth: 96, whiteSpace: 'nowrap' }}>
+                    {t('labels.captureInterval')}
+                  </Text>
                   <InputNumber
                     size="large"
                     min={0.01}
@@ -673,7 +1042,7 @@ export default function App() {
                     onChange={(e) => setMakeVideo(e.target.checked)}
                     disabled={capturing}
                   >
-                    停止后生成 MP4
+                    {t('labels.makeVideo')}
                   </Checkbox>
                 </div>
 
@@ -686,12 +1055,14 @@ export default function App() {
                     width: '100%',
                   }}
                 >
-                  <Text style={{ minWidth: 96, whiteSpace: 'nowrap' }}>保存目录</Text>
+                  <Text style={{ minWidth: 96, whiteSpace: 'nowrap' }}>
+                    {t('labels.saveDirectory')}
+                  </Text>
                   <Input
                     size="large"
                     readOnly
                     value={baseDir}
-                    placeholder="选择截屏保存目录"
+                    placeholder={t('placeholders.saveDirectory')}
                     style={{
                       flex: 1,
                       cursor:
@@ -716,8 +1087,71 @@ export default function App() {
                     onClick={handleChooseDirectory}
                     loading={baseDirLoading}
                   >
-                    浏览...
+                    {t('buttons.browse')}
                   </Button>
+                </div>
+
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 12,
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    width: '100%',
+                  }}
+                >
+                  <Text style={{ minWidth: 96, whiteSpace: 'nowrap' }}>
+                    {t('labels.singleCaptureHotkey')}
+                  </Text>
+                  <Input
+                    size="large"
+                    value={singleCaptureShortcut}
+                    onChange={(event) => setSingleCaptureShortcut(event.target.value ?? '')}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Tab') {
+                        return
+                      }
+                      event.preventDefault()
+                      event.stopPropagation()
+                      if (['Backspace', 'Delete', 'Escape'].includes(event.key)) {
+                        setSingleCaptureShortcut('')
+                        return
+                      }
+                      if (event.repeat) {
+                        return
+                      }
+                      const formatted = formatShortcutFromEvent(event)
+                      if (formatted) {
+                        setSingleCaptureShortcut(formatted)
+                      }
+                    }}
+                    onPaste={(event) => {
+                      const text = event.clipboardData?.getData('text')
+                      if (typeof text === 'string') {
+                        event.preventDefault()
+                        setSingleCaptureShortcut(text.trim())
+                      }
+                    }}
+                    placeholder={t('placeholders.hotkey')}
+                    allowClear
+                    status={parsedHotkey.error ? 'error' : undefined}
+                    style={{ flex: '0 1 200px' }}
+                    data-hotkey-ignore="true"
+                    autoComplete="off"
+                    spellCheck={false}
+                    inputMode="none"
+                  />
+                </div>
+                <div style={{ paddingLeft: 96, width: '100%' }}>
+                  {parsedHotkey.error ? (
+                    <Text type="danger">{parsedHotkey.error}</Text>
+                  ) : parsedHotkey.disabled ? (
+                    <Text type="secondary">{t('messages.hotkeyDisabled')}</Text>
+                  ) : (
+                    <Text type="secondary">
+                      {t('messages.hotkeyHelp', { shortcut: DEFAULT_SINGLE_CAPTURE_SHORTCUT })}
+                    </Text>
+                  )}
                 </div>
               </>
             ) : null}
@@ -739,7 +1173,7 @@ export default function App() {
                 loading={singleCapturing}
                 disabled={!selectedHwnd || singleCapturing}
               >
-                单张截图
+                {t('buttons.singleCapture')}
               </Button>
               <Button
                 type="primary"
@@ -747,7 +1181,7 @@ export default function App() {
                 onClick={handleStart}
                 disabled={!selectedHwnd || capturing}
               >
-                开始截屏
+                {t('buttons.start')}
               </Button>
               <Button
                 danger
@@ -755,11 +1189,11 @@ export default function App() {
                 onClick={handleStop}
                 disabled={!capturing}
               >
-                停止
+                {t('buttons.stop')}
               </Button>
             </Space>
             <Text type="secondary" style={{ whiteSpace: 'nowrap' }}>
-              已截：{captureCount} 张
+              {t('text.captureCount', { count: captureCount })}
             </Text>
           </div>
 
@@ -770,7 +1204,7 @@ export default function App() {
                 style={{ padding: 0, alignSelf: 'flex-start' }}
                 onClick={() => setPreviewCollapsed(false)}
               >
-                展开预览
+                {t('buttons.expandPreview')}
               </Button>
             ) : (
               <Card
@@ -786,38 +1220,40 @@ export default function App() {
                           {detailLines.processLabel}：{detailLines.process}
                         </Text>
                         <Text type="secondary" style={{ fontSize: 12 }}>
-                          句柄：{detailLines.hwndHex}
+                          {t('labels.windowHandle')}：{detailLines.hwndHex}
                         </Text>
                         {detailLines.sizeLine ? (
                           <Text type="secondary" style={{ fontSize: 12 }}>
-                            尺寸：{detailLines.sizeLine}
+                            {t('labels.size')}：{detailLines.sizeLine}
                           </Text>
                         ) : null}
                         {detailLines.monitorDevice ? (
                           <Text type="secondary" style={{ fontSize: 12 }}>
-                            设备：{detailLines.monitorDevice}
+                            {t('labels.device')}：{detailLines.monitorDevice}
                           </Text>
                         ) : null}
                         {detailLines.monitorPrimary ? (
                           <Text type="secondary" style={{ fontSize: 12 }}>
-                            主显示器
+                            {t('labels.monitorPrimary')}
                           </Text>
                         ) : null}
                       </Space>
                     </div>
                   ) : (
-                    '预览'
+                    t('preview.title')
                   )
                 }
                 extra={
                   <Space size="small">
-                    {previewLoading ? <Text type="secondary">加载中…</Text> : null}
+                    {previewLoading ? (
+                      <Text type="secondary">{t('status.previewLoading')}</Text>
+                    ) : null}
                     <Button
                       type="link"
                       style={{ padding: 0 }}
                       onClick={() => setPreviewCollapsed(true)}
                     >
-                      折叠
+                      {t('buttons.collapsePreview')}
                     </Button>
                   </Space>
                 }
@@ -835,14 +1271,14 @@ export default function App() {
                     >
                       <Image
                         src={preview}
-                        alt="窗口预览"
+                        alt={t('preview.title')}
                         style={{ maxWidth: '100%', maxHeight: 300, objectFit: 'contain' }}
-                        preview={{ mask: '点击查看原图' }}
+                        preview={{ mask: t('preview.mask') }}
                       />
                     </div>
                   ) : (
                     <Paragraph type="secondary" style={{ marginBottom: 0 }}>
-                      选择窗口后显示最新截图。
+                      {t('status.previewPlaceholder')}
                     </Paragraph>
                   )}
                 </div>
