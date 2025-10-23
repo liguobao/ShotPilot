@@ -1,5 +1,4 @@
 """macOS-specific helpers for screenshot service."""
-import ctypes
 import time
 from threading import Lock
 from typing import Any, Dict, List, Optional, Tuple
@@ -24,6 +23,46 @@ _mac_monitor_cache: Dict[int, Dict[str, Any]] = {}
 _mac_window_cache: Dict[int, Dict[str, Any]] = {}
 _mac_window_lock = Lock()
 _mac_global_top: Optional[int] = None
+_screen_permission_granted: Optional[bool] = None
+_screen_permission_prompted = False
+
+
+def _ensure_screen_capture_permission() -> None:
+    """Ensure the app has screen recording permission before capturing."""
+    global _screen_permission_granted, _screen_permission_prompted
+    if not Quartz:
+        return
+    preflight = getattr(Quartz, "CGPreflightScreenCaptureAccess", None)
+    if not preflight:
+        return
+    if _screen_permission_granted:
+        return
+    try:
+        granted = bool(preflight())
+    except Exception:
+        granted = True
+    if granted:
+        _screen_permission_granted = True
+        return
+    request_access = getattr(Quartz, "CGRequestScreenCaptureAccess", None)
+    if request_access and not _screen_permission_prompted:
+        try:
+            request_access()
+        except Exception:
+            pass
+        _screen_permission_prompted = True
+        time.sleep(0.1)
+        try:
+            granted = bool(preflight())
+        except Exception:
+            granted = False
+        if granted:
+            _screen_permission_granted = True
+            return
+    _screen_permission_granted = False
+    raise PermissionError(
+        "检测到缺少屏幕录制权限，请在“系统设置 > 隐私与安全 > 屏幕录制”中为应用授予权限，并重新启动应用后再试。"
+    )
 
 
 def _cgimage_to_image(image) -> Optional[Image.Image]:
@@ -51,20 +90,23 @@ def _mac_refresh_monitors() -> List[Dict[str, Any]]:
             _mac_global_top = None
         return monitors
     max_displays = 16
-    display_array = (ctypes.c_uint32 * max_displays)()
-    display_count = ctypes.c_uint32()
-    err = Quartz.CGGetActiveDisplayList(
-        max_displays, display_array, ctypes.byref(display_count)
-    )
+    result = Quartz.CGGetActiveDisplayList(max_displays, None, None)
+    if isinstance(result, tuple) and len(result) == 3:
+        err, active_displays, display_count = result
+    else:
+        err = int(result)
+        active_displays = ()
+        display_count = 0
     if err != Quartz.kCGErrorSuccess:
         with _monitor_lock:
             _mac_monitor_cache.clear()
             _mac_global_top = None
         return monitors
+    display_count = int(display_count or 0)
+    active_display_ids = list(active_displays)[:display_count]
     temp_entries: List[Dict[str, Any]] = []
     max_top = None
-    for idx in range(display_count.value):
-        display_id = display_array[idx]
+    for idx, display_id in enumerate(active_display_ids):
         bounds = Quartz.CGDisplayBounds(display_id)
         left = int(bounds.origin.x)
         bottom = int(bounds.origin.y)
@@ -212,6 +254,7 @@ def _mac_refresh_windows() -> List[Dict[str, Any]]:
 def capture_image(hwnd: int) -> Optional[Image.Image]:
     if not Quartz:
         return None
+    _ensure_screen_capture_permission()
     if hwnd == FULL_SCREEN_HWND:
         return None
     monitor = _get_monitor_entry(hwnd)

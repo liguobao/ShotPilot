@@ -9,7 +9,7 @@ from loguru import logger
 
 from service import capture_preview, default_base_dir, list_windows, screenshot_manager
 
-logger.add("./logs/{time}.log", rotation="10 MB")
+#logger.add("./logs/{time}.log", rotation="10 MB")
 
 
 class Api:
