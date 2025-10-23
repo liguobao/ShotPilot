@@ -58,6 +58,7 @@ export default function App() {
   const [baseDirLoading, setBaseDirLoading] = useState(false)
   const [makeVideo, setMakeVideo] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [previewCollapsed, setPreviewCollapsed] = useState(false)
   const [singleCapturing, setSingleCapturing] = useState(false)
   const lastCountRef = useRef(0)
 
@@ -568,7 +569,7 @@ export default function App() {
           style={{ width: '100%' }}
           bodyStyle={{ padding: 28 }}
         >
-        <Space direction="vertical" size="large" style={{ width: '100%' }}>
+        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
           <div>
             <Title level={3} style={{ marginBottom: 8 }}>
               自动截图器
@@ -762,64 +763,91 @@ export default function App() {
             </Text>
           </div>
 
-          <Space direction="vertical" size="large" style={{ width: '100%' }}>
-            {detailLines ? (
-              <Card size="small" style={{ width: '100%' }}>
-                <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                  <Text strong style={{ fontSize: 16 }}>
-                    {detailLines.title}
-                  </Text>
-                  <Space wrap>
-                    <Text type="secondary">
-                      {detailLines.processLabel}：{detailLines.process}
-                    </Text>
-                    <Text type="secondary">句柄：{detailLines.hwndHex}</Text>
-                    {detailLines.monitorDevice ? (
-                      <Text type="secondary">
-                        设备：{detailLines.monitorDevice}
-                      </Text>
-                    ) : null}
-                    {detailLines.monitorPrimary ? (
-                      <Text type="secondary">主显示器</Text>
-                    ) : null}
-                    {detailLines.sizeLine ? (
-                      <Text type="secondary">尺寸：{detailLines.sizeLine}</Text>
-                    ) : null}
+          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+            {previewCollapsed ? (
+              <Button
+                type="link"
+                style={{ padding: 0, alignSelf: 'flex-start' }}
+                onClick={() => setPreviewCollapsed(false)}
+              >
+                展开预览
+              </Button>
+            ) : (
+              <Card
+                size="small"
+                style={{ width: '100%' }}
+                bodyStyle={{ padding: 12 }}
+                title={
+                  detailLines ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <Text strong style={{ fontSize: 14 }}>{detailLines.title}</Text>
+                      <Space size={6} wrap style={{ fontSize: 12 }}>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          {detailLines.processLabel}：{detailLines.process}
+                        </Text>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          句柄：{detailLines.hwndHex}
+                        </Text>
+                        {detailLines.sizeLine ? (
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            尺寸：{detailLines.sizeLine}
+                          </Text>
+                        ) : null}
+                        {detailLines.monitorDevice ? (
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            设备：{detailLines.monitorDevice}
+                          </Text>
+                        ) : null}
+                        {detailLines.monitorPrimary ? (
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            主显示器
+                          </Text>
+                        ) : null}
+                      </Space>
+                    </div>
+                  ) : (
+                    '预览'
+                  )
+                }
+                extra={
+                  <Space size="small">
+                    {previewLoading ? <Text type="secondary">加载中…</Text> : null}
+                    <Button
+                      type="link"
+                      style={{ padding: 0 }}
+                      onClick={() => setPreviewCollapsed(true)}
+                    >
+                      折叠
+                    </Button>
                   </Space>
-                </Space>
-              </Card>
-            ) : null}
-
-            <Card
-              size="small"
-              style={{ width: '100%' }}
-              bodyStyle={{ padding: 12 }}
-              title="预览"
-              extra={previewLoading ? '加载中…' : null}
-            >
-              {preview ? (
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    maxHeight: 320,
-                    overflow: 'hidden',
-                  }}
-                >
-                  <Image
-                    src={preview}
-                    alt="窗口预览"
-                    style={{ maxWidth: '100%', maxHeight: 300, objectFit: 'contain' }}
-                    preview={{ mask: '点击查看原图' }}
-                  />
+                }
+              >
+                <div style={{ position: 'relative', width: '100%' }}>
+                  {preview ? (
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        maxHeight: 320,
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <Image
+                        src={preview}
+                        alt="窗口预览"
+                        style={{ maxWidth: '100%', maxHeight: 300, objectFit: 'contain' }}
+                        preview={{ mask: '点击查看原图' }}
+                      />
+                    </div>
+                  ) : (
+                    <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                      选择窗口后显示最新截图。
+                    </Paragraph>
+                  )}
                 </div>
-              ) : (
-                <Paragraph type="secondary" style={{ marginBottom: 0 }}>
-                  选择窗口后显示最新截图。
-                </Paragraph>
-              )}
-            </Card>
+              </Card>
+            )}
           </Space>
 
           {statusAlert}
