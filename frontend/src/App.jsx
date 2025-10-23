@@ -47,7 +47,7 @@ export default function App() {
   const [apps, setApps] = useState([])
   const [loadingApps, setLoadingApps] = useState(false)
   const [selectedHwnd, setSelectedHwnd] = useState(null)
-  const [intervalSec, setIntervalSec] = useState(0.5)
+  const [intervalSec, setIntervalSec] = useState(0.05)
   const [capturing, setCapturing] = useState(false)
   const [status, setStatus] = useState(null)
   const [message, setMessage] = useState(null)
@@ -57,6 +57,8 @@ export default function App() {
   const [baseDir, setBaseDir] = useState('')
   const [baseDirLoading, setBaseDirLoading] = useState(false)
   const [makeVideo, setMakeVideo] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [singleCapturing, setSingleCapturing] = useState(false)
   const lastCountRef = useRef(0)
 
   const showMessage = useCallback((type, content) => {
@@ -104,6 +106,34 @@ export default function App() {
     }
   }, [api, makeVideo, showMessage])
 
+  const minimizeAppWindow = useCallback(async () => {
+    if (!api?.minimize_window) return
+    try {
+      const res = await api.minimize_window()
+      if (res && res.success === false) {
+        throw new Error(res.message || '窗口最小化失败')
+      }
+    } catch (err) {
+      const messageText =
+        err instanceof Error ? err.message || '窗口最小化失败' : '窗口最小化失败'
+      showMessage('error', messageText)
+    }
+  }, [api, showMessage])
+
+  const restoreAppWindow = useCallback(async () => {
+    if (!api?.restore_window) return
+    try {
+      const res = await api.restore_window()
+      if (res && res.success === false) {
+        throw new Error(res.message || '窗口恢复失败')
+      }
+    } catch (err) {
+      const messageText =
+        err instanceof Error ? err.message || '窗口恢复失败' : '窗口恢复失败'
+      showMessage('error', messageText)
+    }
+  }, [api, showMessage])
+
   const handleStart = useCallback(async () => {
     if (!api) {
       showMessage('error', 'pywebview 接口不可用，无法启动截屏。')
@@ -136,6 +166,7 @@ export default function App() {
         video_path: res.data?.video_path ?? null,
       })
       lastCountRef.current = res.data?.count ?? 0
+      await minimizeAppWindow()
       showMessage(
         'success',
         `开始截屏：${res.data?.title || '窗口'}，保存目录 ${res.data?.output_dir}`
@@ -143,7 +174,7 @@ export default function App() {
     } catch (err) {
       showMessage('error', err.message || '截屏启动失败')
     }
-  }, [api, intervalSec, selectedHwnd, baseDir, makeVideo, showMessage])
+  }, [api, baseDir, intervalSec, makeVideo, minimizeAppWindow, selectedHwnd, showMessage])
 
   const handleStop = useCallback(async () => {
     if (!api) {
@@ -219,8 +250,39 @@ export default function App() {
       }
     } catch (err) {
       showMessage('error', err.message || '停止截屏失败')
+    } finally {
+      await restoreAppWindow()
     }
-  }, [api, showMessage])
+  }, [api, restoreAppWindow, showMessage])
+
+  const handleSingleCapture = useCallback(async () => {
+    if (!api) {
+      showMessage('error', 'pywebview 接口不可用，无法截屏。')
+      return
+    }
+    if (!selectedHwnd) {
+      showMessage('warning', '请选择要截屏的窗口。')
+      return
+    }
+
+    try {
+      setSingleCapturing(true)
+      const res = await api.capture_once(selectedHwnd)
+      if (!res?.success) {
+        throw new Error(res?.message || '单次截屏失败')
+      }
+      const path =
+        res?.data?.path ?? (typeof res?.data === 'string' ? res.data : null)
+      const successMessage = path
+        ? `单张截图已保存：${path}`
+        : '单张截图已保存到桌面'
+      showMessage('success', successMessage)
+    } catch (err) {
+      showMessage('error', err.message || '单次截屏失败')
+    } finally {
+      setSingleCapturing(false)
+    }
+  }, [api, selectedHwnd, showMessage])
 
   const fetchPreview = useCallback(
     async (hwnd, options = {}) => {
@@ -293,6 +355,7 @@ export default function App() {
           setStatus(statusData)
           if (!statusData?.running) {
             setCapturing(false)
+            restoreAppWindow()
           }
           const statusCount =
             statusData?.current?.count ?? statusData?.count ?? lastCountRef.current
@@ -320,7 +383,7 @@ export default function App() {
       mounted = false
       window.clearInterval(timer)
     }
-  }, [api, capturing, fetchPreview, selectedHwnd])
+  }, [api, capturing, fetchPreview, restoreAppWindow, selectedHwnd])
 
   useEffect(() => {
     if (!selectedHwnd) {
@@ -560,82 +623,103 @@ export default function App() {
               >
                 刷新预览
               </Button>
-            </div>
-
-            <div
-              style={{
-                display: 'flex',
-                gap: 12,
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                flexGrow: 1,
-              }}
-            >
-              <Text style={{ minWidth: 96, whiteSpace: 'nowrap' }}>截图间隔（秒）</Text>
-              <InputNumber
-                size="large"
-                min={0.01}
-                max={60}
-                step={0.01}
-                precision={2}
-                value={intervalSec}
-                onChange={(value) => {
-                  const next =
-                    typeof value === 'number' && !Number.isNaN(value) ? value : 0.5
-                  setIntervalSec(next)
-                }}
-              />
-              <Checkbox
-                checked={makeVideo}
-                onChange={(e) => setMakeVideo(e.target.checked)}
-                disabled={capturing}
-              >
-                停止后生成 MP4
-              </Checkbox>
-            </div>
-
-            <div
-              style={{
-                display: 'flex',
-                gap: 12,
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                width: '100%',
-              }}
-            >
-              <Text style={{ minWidth: 96, whiteSpace: 'nowrap' }}>保存目录</Text>
-              <Input
-                size="large"
-                readOnly
-                value={baseDir}
-                placeholder="选择截屏保存目录"
+              <div
                 style={{
-                  flex: 1,
-                  cursor:
-                    capturing &&
-                    (status?.current?.output_dir || baseDir)
-                      ? 'pointer'
-                      : 'default',
-                  userSelect: 'none',
+                  marginLeft: 'auto',
+                  display: 'flex',
+                  gap: 12,
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
                 }}
-                onClick={() => {
-                  if (!capturing) {
-                    return
-                  }
-                  const dirToOpen =
-                    status?.current?.output_dir || baseDir
-                  if (!dirToOpen) return
-                  openPath(dirToOpen)
-                }}
-              />
-              <Button
-                size="large"
-                onClick={handleChooseDirectory}
-                loading={baseDirLoading}
               >
-                浏览...
-              </Button>
+                <Button
+                  type="link"
+                  style={{ padding: 0 }}
+                  onClick={() => setShowAdvanced((prev) => !prev)}
+                >
+                  {showAdvanced ? '隐藏高级设置' : '高级设置'}
+                </Button>
+              </div>
             </div>
+
+            {showAdvanced ? (
+              <>
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 12,
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    flexGrow: 1,
+                  }}
+                >
+                  <Text style={{ minWidth: 96, whiteSpace: 'nowrap' }}>截图间隔（秒）</Text>
+                  <InputNumber
+                    size="large"
+                    min={0.01}
+                    max={60}
+                    step={0.01}
+                    precision={2}
+                    value={intervalSec}
+                    onChange={(value) => {
+                      const next =
+                        typeof value === 'number' && !Number.isNaN(value) ? value : 0.5
+                      setIntervalSec(next)
+                    }}
+                  />
+                  <Checkbox
+                    checked={makeVideo}
+                    onChange={(e) => setMakeVideo(e.target.checked)}
+                    disabled={capturing}
+                  >
+                    停止后生成 MP4
+                  </Checkbox>
+                </div>
+
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 12,
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    width: '100%',
+                  }}
+                >
+                  <Text style={{ minWidth: 96, whiteSpace: 'nowrap' }}>保存目录</Text>
+                  <Input
+                    size="large"
+                    readOnly
+                    value={baseDir}
+                    placeholder="选择截屏保存目录"
+                    style={{
+                      flex: 1,
+                      cursor:
+                        capturing &&
+                        (status?.current?.output_dir || baseDir)
+                          ? 'pointer'
+                          : 'default',
+                      userSelect: 'none',
+                    }}
+                    onClick={() => {
+                      if (!capturing) {
+                        return
+                      }
+                      const dirToOpen =
+                        status?.current?.output_dir || baseDir
+                      if (!dirToOpen) return
+                      openPath(dirToOpen)
+                    }}
+                  />
+                  <Button
+                    size="large"
+                    onClick={handleChooseDirectory}
+                    loading={baseDirLoading}
+                  >
+                    浏览...
+                  </Button>
+                </div>
+              </>
+            ) : null}
           </Space>
 
           <div
@@ -648,6 +732,14 @@ export default function App() {
             }}
           >
             <Space size="middle" wrap>
+              <Button
+                size="large"
+                onClick={handleSingleCapture}
+                loading={singleCapturing}
+                disabled={!selectedHwnd || singleCapturing}
+              >
+                单张截图
+              </Button>
               <Button
                 type="primary"
                 size="large"

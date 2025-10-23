@@ -7,13 +7,23 @@ from typing import Any, Dict, Optional
 import webview
 from loguru import logger
 
-from service import capture_preview, default_base_dir, list_windows, screenshot_manager
+from service import (
+    capture_preview,
+    capture_single,
+    default_base_dir,
+    list_windows,
+    screenshot_manager,
+)
 
 #logger.add("./logs/{time}.log", rotation="10 MB")
 
 
 class Api:
     """Expose screenshot workflows to the frontend via pywebview."""
+
+    @staticmethod
+    def _get_window():
+        return webview.windows[0] if webview.windows else None
 
     def list_apps(self) -> Dict[str, Any]:
         try:
@@ -60,9 +70,50 @@ class Api:
             logger.exception("Failed to fetch status")
             return {"success": False, "message": str(exc)}
 
+    def minimize_window(self) -> Dict[str, Any]:
+        try:
+            window = self._get_window()
+            if not window:
+                return {"success": False, "message": "未找到应用窗口"}
+            if hasattr(window, "minimize"):
+                window.minimize()  # pywebview 4.x
+            else:
+                window.hide()
+            return {"success": True}
+        except Exception as exc:
+            logger.exception("Failed to minimize window")
+            return {"success": False, "message": str(exc)}
+
+    def restore_window(self) -> Dict[str, Any]:
+        try:
+            window = self._get_window()
+            if not window:
+                return {"success": False, "message": "未找到应用窗口"}
+            if hasattr(window, "restore"):
+                window.restore()
+            else:
+                window.show()
+            if hasattr(window, "bring_to_front"):
+                window.bring_to_front()
+            return {"success": True}
+        except Exception as exc:
+            logger.exception("Failed to restore window")
+            return {"success": False, "message": str(exc)}
+
+    def capture_once(
+        self, hwnd, base_dir: Optional[str] = None
+    ) -> Dict[str, Any]:
+        try:
+            hwnd_int = self._parse_hwnd(hwnd)
+            path = capture_single(hwnd_int, base_dir=base_dir)
+            return {"success": True, "data": {"path": path}}
+        except Exception as exc:
+            logger.exception("Failed single capture")
+            return {"success": False, "message": str(exc)}
+
     def choose_directory(self, initial: Optional[str] = None) -> Dict[str, Any]:
         try:
-            window = webview.windows[0] if webview.windows else None
+            window = self._get_window()
             if not window:
                 return {"success": False, "message": "未找到应用窗口"}
             result = window.create_file_dialog(

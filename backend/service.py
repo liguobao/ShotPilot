@@ -132,6 +132,24 @@ def screenshot_window(hwnd: int, save_path: str) -> None:
     img.save(save_path, "PNG")
 
 
+def capture_single(hwnd: int, base_dir: Optional[str] = None) -> str:
+    """Capture a single frame and persist it to the target directory."""
+    img, _ = _grab_window(hwnd)
+    target_dir = base_dir or default_base_dir()
+    os.makedirs(target_dir, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    base_name = f"screenshot-{timestamp}"
+    candidate = os.path.join(target_dir, f"{base_name}.png")
+    suffix = 1
+    while os.path.exists(candidate):
+        candidate = os.path.join(target_dir, f"{base_name}-{suffix}.png")
+        suffix += 1
+
+    img.save(candidate, "PNG")
+    return candidate
+
+
 def capture_preview(hwnd: int) -> Tuple[bytes, Tuple[int, int, int, int]]:
     img, rect = _grab_window(hwnd)
     buffer = BytesIO()
@@ -334,5 +352,6 @@ __all__ = [
     "list_windows",
     "screenshot_manager",
     "capture_preview",
+    "capture_single",
     "default_base_dir",
 ]
