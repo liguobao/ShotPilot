@@ -383,12 +383,44 @@ export default function App() {
   }, [message])
 
   const options = useMemo(() => {
-    return apps.map((app) => ({
-      label: app.title || '（无标题窗口）',
-      value: app.hwnd,
-      description: `${app.process || '未知进程'} · ${app.hwnd_hex || app.hwnd}`,
-      keywords: `${app.title || ''} ${app.process || ''} ${app.hwnd_hex || ''}`,
-    }))
+    return apps.map((app) => {
+      const label = app.title || '（无标题窗口）'
+      const isMonitor = app.monitor && typeof app.monitor === 'object'
+      const descParts = []
+      if (isMonitor) {
+        if (app.monitor?.device) {
+          descParts.push(app.monitor.device)
+        }
+        if (
+          typeof app.monitor?.width === 'number' &&
+          typeof app.monitor?.height === 'number'
+        ) {
+          descParts.push(`${app.monitor.width} × ${app.monitor.height}`)
+        }
+        if (app.monitor?.primary) {
+          descParts.push('主显示器')
+        }
+      } else {
+        descParts.push(app.process || '未知进程')
+        descParts.push(app.hwnd_hex || app.hwnd)
+      }
+      const description = descParts.filter(Boolean).join(' · ')
+      const keywords = [
+        label,
+        app.process || '',
+        app.hwnd_hex || '',
+        description,
+        isMonitor ? '显示器' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')
+      return {
+        label,
+        value: app.hwnd,
+        description,
+        keywords,
+      }
+    })
   }, [apps])
 
   const selectedAppDetail = useMemo(() => {
@@ -398,16 +430,33 @@ export default function App() {
 
   const detailLines = useMemo(() => {
     if (!selectedAppDetail) return null
-    const title = selectedAppDetail.title || '未知窗口'
-    const process = selectedAppDetail.process || '未知进程'
+    const isMonitor =
+      selectedAppDetail.monitor && typeof selectedAppDetail.monitor === 'object'
+    const title = selectedAppDetail.title || (isMonitor ? '显示器' : '未知窗口')
+    const processLabel = isMonitor ? '类型' : '进程'
+    const process =
+      (isMonitor ? '显示器' : selectedAppDetail.process) || '未知进程'
     const hwndHex = selectedAppDetail.hwnd_hex || selectedAppDetail.hwnd
+    const monitorInfo = isMonitor ? selectedAppDetail.monitor || {} : null
+    const hasMonitorSize =
+      monitorInfo &&
+      typeof monitorInfo.width === 'number' &&
+      typeof monitorInfo.height === 'number'
+    const fallbackSize = hasMonitorSize
+      ? `${monitorInfo.width} × ${monitorInfo.height}`
+      : null
     const rect = previewMeta?.rect
-    const sizeLine = rect ? `${rect.width} × ${rect.height}` : null
+    const sizeLine = rect ? `${rect.width} × ${rect.height}` : fallbackSize
     return {
       title,
+      processLabel,
       process,
       hwndHex,
       sizeLine,
+      isMonitor,
+      monitorDevice:
+        monitorInfo && monitorInfo.device ? monitorInfo.device : null,
+      monitorPrimary: Boolean(monitorInfo && monitorInfo.primary),
     }
   }, [selectedAppDetail, previewMeta])
 
@@ -462,7 +511,7 @@ export default function App() {
               自动截图器
             </Title>
             <Paragraph type="secondary" style={{ marginBottom: 0 }}>
-              选择一个正在运行的窗口，点击“开始截屏”即可按固定间隔保存图片。
+              选择一个窗口或显示器，点击“开始截屏”即可按固定间隔保存图片。
             </Paragraph>
           </div>
 
@@ -480,7 +529,7 @@ export default function App() {
               <Select
                 style={{ flex: '1 1 360px', minWidth: 320 }}
                 size="large"
-                placeholder="请选择要截屏的窗口"
+                placeholder="请选择要截屏的窗口或显示器"
                 options={options}
                 loading={loadingApps}
                 value={selectedHwnd}
@@ -629,8 +678,18 @@ export default function App() {
                     {detailLines.title}
                   </Text>
                   <Space wrap>
-                    <Text type="secondary">进程：{detailLines.process}</Text>
+                    <Text type="secondary">
+                      {detailLines.processLabel}：{detailLines.process}
+                    </Text>
                     <Text type="secondary">句柄：{detailLines.hwndHex}</Text>
+                    {detailLines.monitorDevice ? (
+                      <Text type="secondary">
+                        设备：{detailLines.monitorDevice}
+                      </Text>
+                    ) : null}
+                    {detailLines.monitorPrimary ? (
+                      <Text type="secondary">主显示器</Text>
+                    ) : null}
                     {detailLines.sizeLine ? (
                       <Text type="secondary">尺寸：{detailLines.sizeLine}</Text>
                     ) : null}
