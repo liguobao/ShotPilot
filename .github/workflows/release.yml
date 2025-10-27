@@ -70,8 +70,14 @@ jobs:
             echo "version=${clean}"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Install frontend dependencies
+      - name: Install frontend dependencies (lock)
+        if: ${{ hashFiles('frontend/package-lock.json') != '' }}
         run: npm ci
+        working-directory: frontend
+
+      - name: Install frontend dependencies (no lock)
+        if: ${{ hashFiles('frontend/package-lock.json') == '' }}
+        run: npm install
         working-directory: frontend
 
       - name: Build frontend assets
