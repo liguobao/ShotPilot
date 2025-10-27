@@ -791,42 +791,17 @@ export default function App() {
   }, [selectedHwnd, fetchPreview])
 
   const statusAlert = useMemo(() => {
-    if (!status) return null
-    if (status.last_error) {
-      return (
-        <Alert
-          type="error"
-          showIcon
-          message={t('status.errorTitle')}
-          description={status.last_error}
-        />
-      )
-    }
-    if (status.running && status.current) {
-      const dir = status.current.output_dir
-      return (
-        <Alert
-          type="info"
-          showIcon
-          message={t('status.runningTitle')}
-          description={
-            dir ? (
-              <Button
-                type="link"
-                style={{ padding: 0 }}
-                onClick={() => openPath(dir)}
-              >
-                {dir}
-              </Button>
-            ) : (
-              <Text type="secondary">{t('status.noDirectory')}</Text>
-            )
-          }
-        />
-      )
-    }
-    return null
-  }, [openPath, status, t])
+    const lastError = status?.last_error
+    if (!lastError) return null
+    return (
+      <Alert
+        type="error"
+        showIcon
+        message={t('status.errorTitle')}
+        description={lastError}
+      />
+    )
+  }, [status, t])
 
   const messageAlert = useMemo(() => {
     if (!message) return null
@@ -955,6 +930,11 @@ export default function App() {
   const captureCount = capturing
     ? status?.current?.count ?? status?.count ?? lastCountRef.current ?? 0
     : 0
+
+  const isCaptureRunning = capturing || Boolean(status?.running)
+  const currentOutputDir = isCaptureRunning
+    ? status?.current?.output_dir || baseDir || null
+    : null
 
   const handleChooseDirectory = useCallback(async () => {
     if (!api) {
@@ -1279,6 +1259,22 @@ export default function App() {
               >
                 {t('buttons.stop')}
               </Button>
+              {currentOutputDir ? (
+                <Button
+                  type="link"
+                  style={{
+                    padding: 0,
+                    maxWidth: 360,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                  onClick={() => openPath(currentOutputDir)}
+                  title={currentOutputDir}
+                >
+                  {currentOutputDir}
+                </Button>
+              ) : null}
             </Space>
             <Text type="secondary" style={{ whiteSpace: 'nowrap' }}>
               {t('text.captureCount', { count: captureCount })}
