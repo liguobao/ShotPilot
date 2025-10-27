@@ -8,6 +8,7 @@
 # 克隆仓库后，安装 Python 依赖
 python -m venv .venv
 .venv\Scripts\activate
+#source .venv/bin/activate
 python -m pip install -r backend/requirements.txt
 
 # 安装前端依赖并构建静态资源

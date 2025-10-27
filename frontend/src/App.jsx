@@ -285,6 +285,7 @@ export default function App() {
   const [capturing, setCapturing] = useState(false)
   const [status, setStatus] = useState(null)
   const [message, setMessage] = useState(null)
+  const [messageCopyFeedback, setMessageCopyFeedback] = useState(null)
   const [preview, setPreview] = useState(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewMeta, setPreviewMeta] = useState(null)
@@ -297,6 +298,8 @@ export default function App() {
   const [singleCaptureShortcut, setSingleCaptureShortcut] = useState(
     DEFAULT_SINGLE_CAPTURE_SHORTCUT
   )
+  const lastCountRef = useRef(0)
+  const copyFeedbackTimeoutRef = useRef(null)
 
   const t = useCallback(
     (key, params) => {
@@ -325,6 +328,60 @@ export default function App() {
       })
     }, 10000)
   }, [])
+
+  useEffect(() => {
+    if (copyFeedbackTimeoutRef.current) {
+      window.clearTimeout(copyFeedbackTimeoutRef.current)
+      copyFeedbackTimeoutRef.current = null
+    }
+    setMessageCopyFeedback(null)
+  }, [message ? message.at : null, copyFeedbackTimeoutRef])
+
+  useEffect(() => {
+    return () => {
+      if (copyFeedbackTimeoutRef.current) {
+        window.clearTimeout(copyFeedbackTimeoutRef.current)
+      }
+    }
+  }, [copyFeedbackTimeoutRef])
+
+  const handleCopyMessage = useCallback(
+    async (content) => {
+      if (!content) return
+      const text = typeof content === 'string' ? content : String(content)
+      try {
+        if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text)
+        } else {
+          const textarea = document.createElement('textarea')
+          textarea.value = text
+          textarea.setAttribute('readonly', '')
+          textarea.style.position = 'fixed'
+          textarea.style.left = '-9999px'
+          document.body.appendChild(textarea)
+          textarea.focus()
+          textarea.select()
+          const successful = document.execCommand('copy')
+          document.body.removeChild(textarea)
+          if (!successful) {
+            throw new Error('copy_failed')
+          }
+        }
+        setMessageCopyFeedback('success')
+      } catch {
+        setMessageCopyFeedback('error')
+      } finally {
+        if (copyFeedbackTimeoutRef.current) {
+          window.clearTimeout(copyFeedbackTimeoutRef.current)
+        }
+        copyFeedbackTimeoutRef.current = window.setTimeout(() => {
+          setMessageCopyFeedback(null)
+          copyFeedbackTimeoutRef.current = null
+        }, 2000)
+      }
+    },
+    [copyFeedbackTimeoutRef]
+  )
 
   useEffect(() => {
     if (!api?.get_language) {
@@ -392,9 +449,15 @@ export default function App() {
       return
     }
 
+    const listAppsFn = api.list_apps ?? api.list_app
+    if (typeof listAppsFn !== 'function') {
+      showMessage('error', t('messages.refreshAppsMissingApi'))
+      return
+    }
+
     setLoadingApps(true)
     try {
-      const res = await api.list_apps()
+      const res = await listAppsFn.call(api)
       if (!res?.success) {
         throw new Error(res?.message || t('messages.refreshAppsError'))
       }
@@ -767,6 +830,13 @@ export default function App() {
 
   const messageAlert = useMemo(() => {
     if (!message) return null
+    const isError = message.type === 'error'
+    const feedbackText =
+      messageCopyFeedback === 'success'
+        ? t('messages.copySuccess')
+        : messageCopyFeedback === 'error'
+          ? t('messages.copyFailed')
+          : null
     return (
       <Alert
         type={message.type}
@@ -774,9 +844,27 @@ export default function App() {
         message={message.content}
         closable
         onClose={() => setMessage(null)}
+        action={
+          isError ? (
+            <Space size="small">
+              {feedbackText ? (
+                <Text type={messageCopyFeedback === 'success' ? 'success' : 'danger'}>
+                  {feedbackText}
+                </Text>
+              ) : null}
+              <Button
+                size="small"
+                type="link"
+                onClick={() => handleCopyMessage(message.content)}
+              >
+                {t('buttons.copy')}
+              </Button>
+            </Space>
+          ) : null
+        }
       />
     )
-  }, [message])
+  }, [handleCopyMessage, message, messageCopyFeedback, t])
 
   const options = useMemo(() => {
     return apps.map((app) => {

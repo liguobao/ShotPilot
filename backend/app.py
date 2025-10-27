@@ -99,6 +99,7 @@ class Api:
             logger.exception("Failed to list windows")
             return {"success": False, "message": str(exc)}
 
+
     def start_capture(
         self,
         hwnd,
