@@ -1,4 +1,3 @@
-
 import base64
 import os
 import sys
@@ -14,37 +13,10 @@ from service import (
     list_windows,
     screenshot_manager,
 )
+from translations import DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES
 
 #logger.add("./logs/{time}.log", rotation="10 MB")
 
-SUPPORTED_LANGUAGES: Dict[str, Dict[str, str]] = {
-    "zh-CN": {
-        "language_name": "中文",
-        "app_title": "自动截图器",
-        "window_not_found": "未找到应用窗口",
-        "directory_not_selected": "未选择目录",
-        "path_empty": "路径为空",
-        "path_not_exists": "路径不存在",
-    },
-    "en": {
-        "language_name": "English",
-        "app_title": "Auto Screenshot",
-        "window_not_found": "Application window not found",
-        "directory_not_selected": "No directory selected",
-        "path_empty": "Path is empty",
-        "path_not_exists": "Path does not exist",
-    },
-    "ja": {
-        "language_name": "日本語",
-        "app_title": "自動スクリーンショット",
-        "window_not_found": "アプリケーションウィンドウが見つかりません",
-        "directory_not_selected": "フォルダが選択されていません",
-        "path_empty": "パスが空です",
-        "path_not_exists": "パスが存在しません",
-    },
-}
-
-DEFAULT_LANGUAGE = "zh-CN"
 current_language = DEFAULT_LANGUAGE
 
 

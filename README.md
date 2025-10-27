@@ -1,56 +1,63 @@
-# 自动截图器
+# ShotPilot
 
-桌面端工具，用于轮询截取指定窗口截图，可选自动合成 MP4 预览。
+English | [简体中文](README.zh-CN.md)
 
-## 开发环境
+## Overview
+
+ShotPilot is a desktop utility that captures repeated screenshots from a selected window or monitor. It can optionally compile the captured frames into an MP4 preview when the session stops.
+
+## Development Setup
 
 ```bash
-# 克隆仓库后，安装 Python 依赖
+# Create and activate the Python virtual environment
 python -m venv .venv
-.venv\Scripts\activate
-#source .venv/bin/activate
+source .venv/bin/activate      # macOS/Linux
+# .venv\Scripts\activate       # Windows
+
+# Install backend dependencies
 python -m pip install -r backend/requirements.txt
 
-# 安装前端依赖并构建静态资源
+# Install frontend dependencies and build static assets
 cd frontend
 npm install
 npm run build
 ```
 
-开发时可直接运行：
+## Local Development
 
 ```bash
 cd backend
 python app.py
 ```
 
-前端界面通过 PyWebView 内嵌，`npm run build` 后的资源位于 `frontend/dist`。
+- The frontend UI is embedded through PyWebView.
+- Assets produced by `npm run build` are stored in `frontend/dist`.
 
-## 打包发行
+## Packaging
 
-后台使用 PyInstaller 打包，提供了 PowerShell 脚本：
+ShotPilot ships with a PowerShell helper that uses PyInstaller to build the desktop bundle:
 
 ```bash
 pwsh ./backend/build.ps1 -Version 1.2.0
 ```
 
-脚本会：
+The script will:
 
-1. 检查 `frontend/dist` 是否存在；
-2. 安装 `backend/requirements.txt` 依赖；
-3. 调用 PyInstaller 生成一体化 exe，输出在 `backend/dist`。
+1. Verify that `frontend/dist` exists.
+2. Install dependencies listed in `backend/requirements.txt`.
+3. Invoke PyInstaller to create a one-file executable under `backend/dist`.
 
-生成文件命名为 `ScreenCapture_版本号_日期.exe`，图标位于 `backend/favicon.ico`。
+The generated file is named `ScreenCapture_<version>_<date>.exe`, and the icon is located at `backend/favicon.ico`.
 
-## 功能简介
+## Features
 
-- 列出当前可用窗口，并持续截屏保存 PNG；
-- 支持自定义保存目录、截图间隔（最小 0.01s）；
-- 可选勾选生成 MP4（依赖 moviepy）；
-- 默认保存到桌面（以窗口名+时间建立子目录）；
-- 提供新的科技感截图图标。
+- Enumerate available windows and capture PNG snapshots on an interval.
+- Customize the save directory and capture interval (minimum 0.01s).
+- Optionally stitch the capture into an MP4 (requires `moviepy`).
+- Default save path is the desktop with a timestamped folder.
+- Provides a refreshed, modern capture icon.
 
-## 注意
+## Notes
 
-- 生成 MP4 需安装 ffmpeg（moviepy 会自动提示）；
-- 打包前务必重新执行 `npm run build` 确保前端资源最新。
+- FFmpeg is required to produce MP4 output (moviepy will prompt if missing).
+- Re-run `npm run build` before packaging to ship the latest frontend assets.
