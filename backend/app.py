@@ -186,7 +186,12 @@ class Api:
                 return {"success": False, "message": translate("path_empty")}
             if not os.path.exists(path):
                 return {"success": False, "message": translate("path_not_exists")}
-            os.startfile(path)
+            if sys.platform == "win32":
+                os.startfile(path)
+            elif sys.platform == "darwin":
+                os.system(f'open "{path}"')
+            else:
+                os.system(f'xdg-open "{path}"')
             return {"success": True}
         except Exception as exc:
             logger.exception("Failed to open path")
