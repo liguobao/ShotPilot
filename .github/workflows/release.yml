@@ -5,6 +5,9 @@ on:
     tags:
       - "*"
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build ${{ matrix.display }}
@@ -135,6 +138,5 @@ jobs:
         with:
           files: ${{ steps.asset.outputs.file }}
           tag_name: ${{ steps.version.outputs.raw }}
-          overwrite: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
