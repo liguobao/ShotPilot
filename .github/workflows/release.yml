@@ -130,14 +130,12 @@ jobs:
           base_name = f"ShotPilot-{os.environ['VERSION']}-{os.environ['LABEL']}"
 
           if src.is_dir():
-            archive_root = Path(base_name)
-            dest = archive_root.with_suffix(".zip")
-            if dest.exists():
-              dest.unlink()
-            shutil.make_archive(str(archive_root), "zip", root_dir=src.parent, base_dir=src.name)
+            zip_path = Path(f"{base_name}.zip")
+            if zip_path.exists():
+              zip_path.unlink()
+            dest = Path(shutil.make_archive(base_name, "zip", root_dir=src.parent, base_dir=src.name))
           else:
-            dest = Path(f"{base_name}{src.suffix}")
-            shutil.copy2(src, dest)
+            dest = Path(shutil.copy2(src, Path(f"{base_name}{src.suffix}")))
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
             fh.write(f"file={dest}\n")
