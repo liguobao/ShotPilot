@@ -1,3 +1,4 @@
+import hashlib
 import importlib
 import importlib.util
 import os
@@ -318,27 +319,57 @@ class ScreenshotManager:
         )
         if not frame_paths:
             return None
-        images = []
-        widths: List[int] = []
-        heights: List[int] = []
+        subtitle_ratio = 0.22
+        spacer_height = 8
+        subtitle_blocks: List[Image.Image] = []
+        seen_hashes: set[str] = set()
+
+        first_frame_path = frame_paths[0]
+        with Image.open(first_frame_path) as base_src:
+            base_image = base_src.convert("RGBA")
+
+        base_width = base_image.width
+        base_height = base_image.height
+
         for path in frame_paths:
             with Image.open(path) as img:
                 converted = img.convert("RGBA")
-                images.append(converted)
-                widths.append(converted.width)
-                heights.append(converted.height)
-        total_height = sum(heights)
-        max_width = max(widths) if widths else 0
-        if total_height <= 0 or max_width <= 0:
-            for image in images:
-                image.close()
-            return None
-        longshot = Image.new("RGBA", (max_width, total_height), (255, 255, 255, 0))
-        offset = 0
-        for image in images:
-            longshot.paste(image, (0, offset))
-            offset += image.height
-            image.close()
+                crop_height = max(1, int(round(converted.height * subtitle_ratio)))
+                crop_box = (
+                    0,
+                    max(0, converted.height - crop_height),
+                    converted.width,
+                    converted.height,
+                )
+                subtitle_region = converted.crop(crop_box).convert("RGBA")
+                if subtitle_region.width != base_width:
+                    subtitle_region = subtitle_region.resize(
+                        (base_width, subtitle_region.height), Image.BILINEAR
+                    )
+                digest = hashlib.sha1(subtitle_region.tobytes()).hexdigest()
+                if digest in seen_hashes:
+                    subtitle_region.close()
+                    converted.close()
+                    continue
+                seen_hashes.add(digest)
+                subtitle_blocks.append(subtitle_region)
+                converted.close()
+
+        total_subtitle_height = sum(block.height for block in subtitle_blocks)
+        if subtitle_blocks:
+            total_subtitle_height += spacer_height * len(subtitle_blocks)
+
+        canvas_height = base_height + total_subtitle_height
+        longshot = Image.new("RGBA", (base_width, canvas_height), (0, 0, 0, 0))
+        longshot.paste(base_image, (0, 0))
+        offset = base_height
+        for block in subtitle_blocks:
+            if spacer_height:
+                offset += spacer_height
+            longshot.paste(block, (0, offset))
+            offset += block.height
+            block.close()
+        base_image.close()
         longshot_path = os.path.join(out_dir, "longshot.png")
         longshot.save(longshot_path, "PNG")
         longshot.close()
