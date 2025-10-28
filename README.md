@@ -4,7 +4,7 @@ English | [简体中文](README.zh-CN.md)
 
 ## Overview
 
-ShotPilot is a desktop utility that captures repeated screenshots from a selected window or monitor. It can optionally compile the captured frames into an MP4 preview when the session stops.
+ShotPilot is a desktop utility that captures repeated screenshots from a selected window or monitor, with tooling geared toward long-form image capture workflows.
 
 ## Development Setup
 
