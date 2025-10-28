@@ -291,7 +291,7 @@ export default function App() {
   const [previewMeta, setPreviewMeta] = useState(null)
   const [baseDir, setBaseDir] = useState('')
   const [baseDirLoading, setBaseDirLoading] = useState(false)
-  const [makeVideo, setMakeVideo] = useState(false)
+  const [makeLongshot, setMakeLongshot] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [previewCollapsed, setPreviewCollapsed] = useState(false)
   const [singleCapturing, setSingleCapturing] = useState(false)
@@ -520,7 +520,7 @@ export default function App() {
         selectedHwnd,
         intervalSec,
         baseDir || undefined,
-        makeVideo,
+        makeLongshot,
       )
       if (!res?.success) {
         throw new Error(res?.message || t('messages.captureStartError'))
@@ -532,8 +532,8 @@ export default function App() {
         last_error: null,
         count: res.data?.count ?? 0,
         last_file: res.data?.last_file ?? null,
-        make_video: res.data?.make_video ?? makeVideo,
-        video_path: res.data?.video_path ?? null,
+        make_longshot: res.data?.make_longshot ?? makeLongshot,
+        longshot_path: res.data?.longshot_path ?? null,
       })
       lastCountRef.current = res.data?.count ?? 0
       await minimizeAppWindow()
@@ -548,7 +548,7 @@ export default function App() {
     } catch (err) {
       showMessage('error', err.message || t('messages.captureStartError'))
     }
-  }, [api, baseDir, intervalSec, makeVideo, minimizeAppWindow, selectedHwnd, showMessage, t])
+  }, [api, baseDir, intervalSec, makeLongshot, minimizeAppWindow, selectedHwnd, showMessage, t])
 
   const handleStop = useCallback(async () => {
     if (!api) {
@@ -562,17 +562,17 @@ export default function App() {
         throw new Error(res?.message || t('messages.noRunningTask'))
       }
       const totalCount = res?.data?.count ?? 0
-      const videoPath = res?.data?.video_path
+      const longshotPath = res?.data?.longshot_path
       setCapturing(false)
       lastCountRef.current = 0
       setStatus((prev) => {
-        const wasMakingVideo = prev?.current?.make_video ?? makeVideo
+        const wasMakingLongshot = prev?.current?.make_longshot ?? makeLongshot
         const currentInfo = prev?.current
           ? {
               ...prev.current,
               count: 0,
-              make_video: wasMakingVideo,
-              video_path: videoPath || prev.current.video_path || null,
+              make_longshot: wasMakingLongshot,
+              longshot_path: longshotPath || prev.current.longshot_path || null,
             }
           : null
         return {
@@ -581,37 +581,37 @@ export default function App() {
           last_error: null,
           count: 0,
           last_file: null,
-          video_path: videoPath || null,
-          make_video: wasMakingVideo,
+          longshot_path: longshotPath || null,
+          make_longshot: wasMakingLongshot,
         }
       })
-      const stopMessage = videoPath
-        ? t('messages.captureStopSuccessWithVideo', {
+      const stopMessage = longshotPath
+        ? t('messages.captureStopSuccessWithLongshot', {
             count: totalCount,
-            path: videoPath,
+            path: longshotPath,
           })
         : t('messages.captureStopSuccess', { count: totalCount })
-      showMessage(videoPath ? 'success' : 'info', stopMessage)
+      showMessage(longshotPath ? 'success' : 'info', stopMessage)
 
       const statusRes = await api.get_status()
       if (statusRes?.success) {
         const data = statusRes.data || {}
         setStatus((prev) => {
-          const fallbackVideo =
-            data?.video_path ?? videoPath ?? prev?.video_path ?? null
-          const makeVideoFlag =
-            data?.make_video ??
-            prev?.make_video ??
-            prev?.current?.make_video ??
-            makeVideo
+          const fallbackLongshot =
+            data?.longshot_path ?? longshotPath ?? prev?.longshot_path ?? null
+          const makeLongshotFlag =
+            data?.make_longshot ??
+            prev?.make_longshot ??
+            prev?.current?.make_longshot ??
+            makeLongshot
           const currentInfo =
             prev?.current ||
             (data?.current
               ? {
                   ...data.current,
                   count: 0,
-                  video_path: data.current.video_path ?? fallbackVideo,
-                  make_video: data.current.make_video ?? makeVideoFlag,
+                  longshot_path: data.current.longshot_path ?? fallbackLongshot,
+                  make_longshot: data.current.make_longshot ?? makeLongshotFlag,
                 }
               : null)
           return {
@@ -620,8 +620,8 @@ export default function App() {
             last_error: data?.last_error ?? null,
             count: 0,
             last_file: null,
-            video_path: fallbackVideo,
-            make_video: makeVideoFlag,
+            longshot_path: fallbackLongshot,
+            make_longshot: makeLongshotFlag,
           }
         })
       }
@@ -630,7 +630,7 @@ export default function App() {
     } finally {
       await restoreAppWindow()
     }
-  }, [api, makeVideo, restoreAppWindow, showMessage, t])
+  }, [api, makeLongshot, restoreAppWindow, showMessage, t])
 
   const handleSingleCapture = useCallback(async () => {
     if (!api) {
@@ -1106,11 +1106,11 @@ export default function App() {
                     }}
                   />
                   <Checkbox
-                    checked={makeVideo}
-                    onChange={(e) => setMakeVideo(e.target.checked)}
+                    checked={makeLongshot}
+                    onChange={(e) => setMakeLongshot(e.target.checked)}
                     disabled={capturing}
                   >
-                    {t('labels.makeVideo')}
+                    {t('labels.makeLongshot')}
                   </Checkbox>
                 </div>
 

@@ -20,7 +20,7 @@ const ja = {
   'buttons.expandPreview': 'プレビューを展開',
   'labels.captureInterval': '間隔（秒）',
   'labels.saveDirectory': '保存先フォルダ',
-  'labels.makeVideo': '停止後に MP4 を生成',
+  'labels.makeLongshot': '停止後にロングスクリーンショットを生成',
   'labels.language': '言語',
   'labels.singleCaptureHotkey': '単発キャプチャのショートカット',
   'labels.untitledWindow': '（無題のウィンドウ）',
@@ -50,8 +50,8 @@ const ja = {
   'messages.noRunningTask': '実行中のキャプチャはありません。',
   'messages.captureStopError': 'キャプチャの停止に失敗しました。',
   'messages.captureStopSuccess': 'キャプチャを停止しました。{{count}} 枚保存しました。',
-  'messages.captureStopSuccessWithVideo':
-    'キャプチャを停止しました。{{count}} 枚保存し、動画を {{path}} に作成しました。',
+  'messages.captureStopSuccessWithLongshot':
+    'キャプチャを停止しました。{{count}} 枚保存し、ロングスクリーンショットを {{path}} に保存しました。',
   'messages.previewError': 'プレビューの取得に失敗しました。',
   'messages.openPathError': 'フォルダを開けません。手動でご確認ください。',
   'messages.chooseDirError': 'フォルダの選択に失敗しました。',

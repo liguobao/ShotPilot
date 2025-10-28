@@ -9,14 +9,7 @@ from pathlib import Path
 from threading import Event, Lock, Thread
 from typing import Any, Dict, List, Optional, Tuple
 
-from PIL import ImageGrab
-
-try:
-    from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
-    MOVIEPY_AVAILABLE = True
-except ModuleNotFoundError:
-    ImageSequenceClip = None
-    MOVIEPY_AVAILABLE = False
+from PIL import Image, ImageGrab
 
 IS_WINDOWS = os.name == "nt"
 IS_MAC = sys.platform == "darwin"
@@ -179,8 +172,8 @@ class ScreenshotManager:
         self._last_error: Optional[str] = None
         self._count: int = 0
         self._last_file: Optional[str] = None
-        self._make_video: bool = False
-        self._video_path: Optional[str] = None
+        self._make_longshot: bool = False
+        self._longshot_path: Optional[str] = None
         self._out_dir: Optional[str] = None
         self._interval: float = 0.5
         set_dpi_awareness()
@@ -190,7 +183,7 @@ class ScreenshotManager:
         hwnd: int,
         interval: float = 0.5,
         base_dir: Optional[str] = None,
-        make_video: bool = False,
+        make_longshot: bool = False,
     ) -> Dict[str, str]:
         with self._lock:
             if self._thread and self._thread.is_alive():
@@ -213,10 +206,8 @@ class ScreenshotManager:
             self._last_error = None
             self._count = 0
             self._last_file = None
-            if make_video and not MOVIEPY_AVAILABLE:
-                raise RuntimeError("当前环境未安装 moviepy，无法生成视频，请先安装或关闭该选项。")
-            self._make_video = bool(make_video)
-            self._video_path = None
+            self._make_longshot = bool(make_longshot)
+            self._longshot_path = None
             self._out_dir = out_dir
             self._interval = interval if interval > 0 else 0.5
 
@@ -237,7 +228,7 @@ class ScreenshotManager:
                 "started_at": datetime.now().isoformat(timespec="seconds"),
                 "count": self._count,
                 "last_file": self._last_file,
-                "make_video": self._make_video,
+                "make_longshot": self._make_longshot,
             }
             return dict(self._current)
 
@@ -254,7 +245,7 @@ class ScreenshotManager:
                     if self._current is not None:
                         self._current["count"] = idx
                         self._current["last_file"] = save_path
-                        self._current["make_video"] = self._make_video
+                        self._current["make_longshot"] = self._make_longshot
                 # Wait on the event so we can stop promptly
                 if self._stop_event.wait(max(0.01, interval)):
                     break
@@ -272,18 +263,18 @@ class ScreenshotManager:
             self._stop_event.set()
             thread = self._thread
         thread.join(timeout=5)
-        video_path = None
+        longshot_path = None
         final_count = self._count
         final_last_file = self._last_file
-        if self._make_video and final_count > 0 and self._out_dir:
+        if self._make_longshot and final_count > 0 and self._out_dir:
             try:
-                video_path = self._create_video(self._out_dir, self._interval)
+                longshot_path = self._create_longshot(self._out_dir)
             except Exception as exc:
                 self._last_error = self._last_error or str(exc)
-                video_path = None
+                longshot_path = None
         with self._lock:
-            self._video_path = video_path
-            self._make_video = False
+            self._longshot_path = longshot_path
+            self._make_longshot = False
             self._out_dir = None
             self._interval = 0.5
             self._count = 0
@@ -293,7 +284,7 @@ class ScreenshotManager:
                 "message": self._last_error,
                 "count": final_count,
                 "last_file": final_last_file,
-                "video_path": self._video_path,
+                "longshot_path": self._longshot_path,
             }
 
     def status(self) -> Dict[str, Optional[str]]:
@@ -306,43 +297,52 @@ class ScreenshotManager:
             "last_error": self._last_error,
             "count": self._count,
             "last_file": self._last_file,
-            "video_path": self._video_path,
-            "make_video": self._make_video,
+            "longshot_path": self._longshot_path,
+            "make_longshot": self._make_longshot,
         }
 
-    def _create_video(self, out_dir: str, interval: float) -> Optional[str]:
-        if not MOVIEPY_AVAILABLE:
-            raise RuntimeError("当前环境未安装 moviepy，无法生成视频")
-        frames = sorted(
+    def _create_longshot(self, out_dir: str) -> Optional[str]:
+        def frame_key(path: str):
+            stem = Path(path).stem
+            if stem.isdigit():
+                return (0, int(stem))
+            return (1, stem)
+
+        frame_paths = sorted(
             [
                 os.path.join(out_dir, name)
                 for name in os.listdir(out_dir)
                 if name.lower().endswith((".png", ".jpg", ".jpeg"))
-            ]
+            ],
+            key=frame_key,
         )
-        if not frames:
+        if not frame_paths:
             return None
-        actual_fps = 1.0 / interval if interval > 0 else 1.0
-        target_fps = 60
-        if actual_fps > target_fps:
-            step = max(1, int(round(actual_fps / target_fps)))
-            frames = frames[::step] or frames
-            fps = target_fps
-        else:
-            fps = max(1, int(round(actual_fps)))
-        clip = ImageSequenceClip(frames, fps=fps)
-        video_path = os.path.join(out_dir, "capture.mp4")
-        try:
-            clip.write_videofile(
-                video_path,
-                codec="libx264",
-                audio=False,
-                fps=fps,
-                logger=None,
-            )
-        finally:
-            clip.close()
-        return video_path
+        images = []
+        widths: List[int] = []
+        heights: List[int] = []
+        for path in frame_paths:
+            with Image.open(path) as img:
+                converted = img.convert("RGBA")
+                images.append(converted)
+                widths.append(converted.width)
+                heights.append(converted.height)
+        total_height = sum(heights)
+        max_width = max(widths) if widths else 0
+        if total_height <= 0 or max_width <= 0:
+            for image in images:
+                image.close()
+            return None
+        longshot = Image.new("RGBA", (max_width, total_height), (255, 255, 255, 0))
+        offset = 0
+        for image in images:
+            longshot.paste(image, (0, offset))
+            offset += image.height
+            image.close()
+        longshot_path = os.path.join(out_dir, "longshot.png")
+        longshot.save(longshot_path, "PNG")
+        longshot.close()
+        return longshot_path
 
 
 screenshot_manager = ScreenshotManager()

@@ -20,7 +20,7 @@ const en = {
   'buttons.expandPreview': 'Expand Preview',
   'labels.captureInterval': 'Interval (seconds)',
   'labels.saveDirectory': 'Save Directory',
-  'labels.makeVideo': 'Create MP4 after stopping',
+  'labels.makeLongshot': 'Stitch long screenshot after stopping',
   'labels.language': 'Language',
   'labels.singleCaptureHotkey': 'Single snapshot hotkey',
   'labels.untitledWindow': '(Untitled window)',
@@ -47,8 +47,8 @@ const en = {
   'messages.noRunningTask': 'No active capture task.',
   'messages.captureStopError': 'Failed to stop the capture.',
   'messages.captureStopSuccess': 'Capture stopped. Saved {{count}} image(s).',
-  'messages.captureStopSuccessWithVideo':
-    'Capture stopped. Saved {{count}} image(s). Video created at {{path}}.',
+  'messages.captureStopSuccessWithLongshot':
+    'Capture stopped. Saved {{count}} image(s). Long screenshot saved at {{path}}.',
   'messages.previewError': 'Unable to fetch the screenshot preview.',
   'messages.openPathError': 'Unable to open the directory; please check manually.',
   'messages.chooseDirError': 'Failed to choose a directory.',

@@ -53,11 +53,11 @@ The generated file is named `ShotPilot-<version>-windows.exe`, and the icon is l
 
 - Enumerate available windows and capture PNG snapshots on an interval.
 - Customize the save directory and capture interval (minimum 0.01s).
-- Optionally stitch the capture into an MP4 (requires `moviepy`).
+- Optionally stitch multiple frames into a single long screenshot.
 - Default save path is the desktop with a timestamped folder.
 - Provides a refreshed, modern capture icon.
 
 ## Notes
 
-- FFmpeg is required to produce MP4 output (moviepy will prompt if missing).
+- Use the “Long screenshot” option if you need a stitched image after scrolling.
 - Re-run `npm run build` before packaging to ship the latest frontend assets.

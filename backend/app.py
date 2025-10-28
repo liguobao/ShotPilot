@@ -77,7 +77,7 @@ class Api:
         hwnd,
         interval=0.5,
         base_dir: Optional[str] = None,
-        make_video: bool = False,
+        make_longshot: bool = False,
     ) -> Dict[str, Any]:
         try:
             hwnd_int = self._parse_hwnd(hwnd)
@@ -85,7 +85,7 @@ class Api:
                 hwnd_int,
                 float(interval),
                 base_dir=base_dir,
-                make_video=bool(make_video),
+                make_longshot=bool(make_longshot),
             )
             return {"success": True, "data": info}
         except Exception as exc:
