@@ -14,7 +14,7 @@ if (-not (Test-Path "..\frontend\dist\index.html")) {
 }
 
 $today = Get-Date -Format "yyyyMMdd"
-$outputName = "ScreenCapture_{0}_{1}" -f $Version, $today
+$outputName = "ShotPilot_{0}_{1}" -f $Version, $today
 
 Write-Host "Packaging as $outputName"
 

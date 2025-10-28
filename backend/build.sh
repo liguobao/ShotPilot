@@ -61,7 +61,7 @@ if [[ ! -f "$frontend_dist" ]]; then
 fi
 
 today="$(date +%Y%m%d)"
-output_name="ScreenCapture_${version}_${today}"
+output_name="ShotPilot_${version}_${today}"
 
 echo "Packaging as $output_name"
 

@@ -32,7 +32,7 @@ def _ensure_screen_capture_permission() -> None:
     global _screen_permission_granted, _screen_permission_prompted
     if not Quartz:
         return
-    preflight = getattr(Quartz, "CGPreflightScreenCaptureAccess", None)
+    preflight = getattr(Quartz, "CGPreflightShotPilotAccess", None)
     if not preflight:
         return
     if _screen_permission_granted:
@@ -44,7 +44,7 @@ def _ensure_screen_capture_permission() -> None:
     if granted:
         _screen_permission_granted = True
         return
-    request_access = getattr(Quartz, "CGRequestScreenCaptureAccess", None)
+    request_access = getattr(Quartz, "CGRequestShotPilotAccess", None)
     if request_access and not _screen_permission_prompted:
         try:
             request_access()

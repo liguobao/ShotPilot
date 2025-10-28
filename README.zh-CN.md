@@ -47,7 +47,7 @@ pwsh ./backend/build.ps1 -Version 1.2.0
 2. 安装 `backend/requirements.txt` 中的依赖；
 3. 调用 PyInstaller 生成一体化可执行文件，输出在 `backend/dist`。
 
-生成文件命名为 `ScreenCapture_版本号_日期.exe`，图标位于 `backend/favicon.ico`。
+生成文件命名为 `ShotPilot_版本号_日期.exe`，图标位于 `backend/favicon.ico`。
 
 ## 功能简介
 
