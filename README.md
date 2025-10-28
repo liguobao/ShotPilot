@@ -47,7 +47,7 @@ The script will:
 2. Install dependencies listed in `backend/requirements.txt`.
 3. Invoke PyInstaller to create a one-file executable under `backend/dist`.
 
-The generated file is named `ShotPilot_<version>_<date>.exe`, and the icon is located at `backend/favicon.ico`.
+The generated file is named `ShotPilot-<version>-windows.exe`, and the icon is located at `backend/favicon.ico`.
 
 ## Features
 

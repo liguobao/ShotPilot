@@ -281,7 +281,7 @@ export default function App() {
   const [apps, setApps] = useState([])
   const [loadingApps, setLoadingApps] = useState(false)
   const [selectedHwnd, setSelectedHwnd] = useState(null)
-  const [intervalSec, setIntervalSec] = useState(0.05)
+  const [intervalSec, setIntervalSec] = useState(0.1)
   const [capturing, setCapturing] = useState(false)
   const [status, setStatus] = useState(null)
   const [message, setMessage] = useState(null)

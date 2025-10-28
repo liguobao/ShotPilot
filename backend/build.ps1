@@ -13,8 +13,8 @@ if (-not (Test-Path "..\frontend\dist\index.html")) {
     Write-Error "frontend/dist 未找到，请先在 frontend 目录执行 npm run build"
 }
 
-$today = Get-Date -Format "yyyyMMdd"
-$outputName = "ShotPilot_{0}_{1}" -f $Version, $today
+$platform = "windows"
+$outputName = "ShotPilot-{0}-{1}" -f $Version, $platform
 
 Write-Host "Packaging as $outputName"
 

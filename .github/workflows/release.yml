@@ -105,7 +105,7 @@ jobs:
           from pathlib import Path
 
           dist_dir = Path("backend/dist")
-          candidates = sorted(dist_dir.glob("ShotPilot_*"), key=lambda p: p.stat().st_mtime, reverse=True)
+          candidates = sorted(dist_dir.glob("ShotPilot*"), key=lambda p: p.stat().st_mtime, reverse=True)
           if not candidates:
             raise SystemExit("::error::No build artifact found in backend/dist")
 

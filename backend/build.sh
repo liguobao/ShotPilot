@@ -60,8 +60,8 @@ if [[ ! -f "$frontend_dist" ]]; then
   exit 1
 fi
 
-today="$(date +%Y%m%d)"
-output_name="ShotPilot_${version}_${today}"
+platform_label="macos"
+output_name="ShotPilot-${version}-${platform_label}"
 
 echo "Packaging as $output_name"
 
