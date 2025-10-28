@@ -127,16 +127,60 @@ jobs:
           from pathlib import Path
 
           src = Path(os.environ["SRC_PATH"])
-          dest = Path(f"ShotPilot-{os.environ['VERSION']}-{os.environ['LABEL']}{src.suffix}")
-          shutil.copy2(src, dest)
+          base_name = f"ShotPilot-{os.environ['VERSION']}-{os.environ['LABEL']}"
+
+          if src.is_dir():
+            archive_root = Path(base_name)
+            dest = archive_root.with_suffix(".zip")
+            if dest.exists():
+              dest.unlink()
+            shutil.make_archive(str(archive_root), "zip", root_dir=src.parent, base_dir=src.name)
+          else:
+            dest = Path(f"{base_name}{src.suffix}")
+            shutil.copy2(src, dest)
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
             fh.write(f"file={dest}\n")
 
-      - name: Upload release asset
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.label }}-asset
+          path: ${{ steps.asset.outputs.file }}
+
+  release:
+    name: Publish Release
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${RELEASE_TAG:-}" ]]; then
+            echo "Release tag missing" >&2
+            exit 1
+          fi
+          clean="${RELEASE_TAG#v}"
+          {
+            echo "raw=${RELEASE_TAG}"
+            echo "version=${clean}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish GitHub release
         uses: softprops/action-gh-release@v1
         with:
-          files: ${{ steps.asset.outputs.file }}
+          files: release-assets/**
           tag_name: ${{ steps.version.outputs.raw }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
